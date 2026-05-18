@@ -162,6 +162,8 @@ export function AddEntryWizard({
     >
       <StepCredentials
         defaultUrl={sub?.defaultUrl}
+        websiteLabel={sub?.name ?? "Website"}
+        userLabel={person?.name ?? ""}
         value={credentials}
         onChange={setCredentials}
       />

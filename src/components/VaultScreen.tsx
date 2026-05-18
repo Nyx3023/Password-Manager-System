@@ -180,7 +180,7 @@ export function VaultScreen(props: VaultScreenProps) {
             <input
               type="search"
               className="search"
-              placeholder="Search name, person, serviceâ€¦"
+              placeholder="Search name, person, service..."
               value={query}
               onChange={(e) => setQuery(e.target.value)}
             />

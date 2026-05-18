@@ -1,5 +1,5 @@
 import { FormEvent, useEffect, useState } from "react";
-import { generatePassword } from "@/shared/passwordGenerator";
+import { PasswordGeneratorPanel } from "./PasswordGeneratorPanel";
 import { normalizeEntry, suggestedTitle } from "@/shared/entryUtils";
 import { colorForId, groupPeopleByCategory } from "@/shared/people";
 import type { Person, VaultEntry } from "@/shared/types";
@@ -33,6 +33,7 @@ export function EntryForm({
     notes: e.notes,
   });
   const [showPassword, setShowPassword] = useState(false);
+  const [showGenerator, setShowGenerator] = useState(false);
   const [saving, setSaving] = useState(false);
 
   useEffect(() => {
@@ -51,6 +52,8 @@ export function EntryForm({
 
   const sub = getSubcategory(form.categoryId, form.subcategoryId);
   const personGroups = groupPeopleByCategory(people);
+  const person = people.find((p) => p.id === form.personId);
+  const generatorUser = form.username.trim() || person?.name || "";
 
   const handleSubmit = async (ev: FormEvent) => {
     ev.preventDefault();
@@ -152,21 +155,21 @@ export function EntryForm({
       <button
         type="button"
         className="ghost block"
-        onClick={() =>
-          setForm((f) => ({
-            ...f,
-            password: generatePassword({
-              length: 20,
-              lowercase: true,
-              uppercase: true,
-              digits: true,
-              symbols: true,
-            }),
-          }))
-        }
+        onClick={() => setShowGenerator((v) => !v)}
       >
-        🎲 Generate new password
+        {showGenerator ? "Hide generator" : "Generate password"}
       </button>
+
+      {showGenerator && (
+        <PasswordGeneratorPanel
+          websiteLabel={sub?.name ?? "Website"}
+          userLabel={generatorUser}
+          onUse={(password) => {
+            setForm((f) => ({ ...f, password }));
+            setShowGenerator(false);
+          }}
+        />
+      )}
 
       <label>
         Website

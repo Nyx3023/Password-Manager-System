@@ -57,3 +57,35 @@ function shuffle<T>(items: T[]): void {
     [items[i], items[j]] = [items[j]!, items[i]!];
   }
 }
+
+function randomDigits(count: number): string {
+  let out = "";
+  for (let i = 0; i < count; i++) {
+    out += DIGITS[crypto.getRandomValues(new Uint32Array(1))[0]! % DIGITS.length]!;
+  }
+  return out;
+}
+
+/** Sanitize for WEBSITE_username.123456 template. */
+function siteToken(websiteLabel: string): string {
+  const letters = websiteLabel.replace(/[^a-zA-Z0-9]/g, "");
+  return (letters || "SITE").toUpperCase();
+}
+
+function userToken(userLabel: string): string {
+  const raw = userLabel.trim();
+  const local = raw.includes("@") ? raw.split("@")[0]! : raw;
+  const letters = local.replace(/[^a-zA-Z0-9]/g, "");
+  return (letters || "user").toLowerCase();
+}
+
+/**
+ * Template: WEBSITE_username.123456
+ * Example: LINKEDIN_john.482910
+ */
+export function generateWebsiteFormatPassword(
+  websiteLabel: string,
+  userLabel: string,
+): string {
+  return `${siteToken(websiteLabel)}_${userToken(userLabel)}.${randomDigits(6)}`;
+}

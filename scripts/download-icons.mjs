@@ -24,9 +24,14 @@ function parseSlugsFromSource(source) {
 }
 
 function normalizeSvgForDarkTile(svg) {
-  return svg
+  let out = svg
     .replace(/\sfill="[^"]*"/gi, ' fill="#ffffff"')
     .replace(/\sfill:[^;"]+/gi, " fill:#ffffff");
+  if (!/<svg[^>]*\sfill="/i.test(out)) {
+    out = out.replace(/<svg\b/, '<svg fill="#ffffff"');
+  }
+  out = out.replace(/<path(?![^>]*\sfill=)/gi, '<path fill="#ffffff"');
+  return out;
 }
 
 async function fetchSvg(url) {
@@ -51,8 +56,7 @@ async function downloadOne(id, slug) {
   for (const url of sources) {
     try {
       const text = await fetchSvg(url);
-      const normalized =
-        url.includes("jsdelivr") ? normalizeSvgForDarkTile(text) : text;
+      const normalized = normalizeSvgForDarkTile(text);
       fs.writeFileSync(path.join(OUT_DIR, `${id}.svg`), normalized, "utf8");
       return;
     } catch (err) {

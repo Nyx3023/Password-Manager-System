@@ -26,11 +26,11 @@
   --safe-left: env(safe-area-inset-left, 0px);
   --safe-right: env(safe-area-inset-right, 0px);
   /* Minimum insets when Android WebView reports safe-area as 0. */
-  --header-min: 52px;
+  --header-min: 38px;
   --gutter-min: 26px;
   --gutter-right-min: 34px;
   /* Punch-hole / status bar clearance. */
-  --header-extra: 12px;
+  --header-extra: 8px;
   --header-inset: max(
     var(--header-min),
     calc(var(--safe-top) + var(--header-extra))
@@ -437,6 +437,8 @@ button:disabled {
   width: 70%;
   height: 70%;
   object-fit: contain;
+  /* Fallback when bundled SVG paths omit fill (e.g. Amazon). */
+  filter: brightness(0) invert(1);
 }
 
 .person-avatar {
@@ -877,6 +879,48 @@ button:disabled {
   display: flex;
   flex-direction: column;
   gap: 10px;
+}
+
+.generator-mode-tabs {
+  display: grid;
+  grid-template-columns: 1fr 1fr;
+  gap: 8px;
+}
+
+.generator-mode-tab {
+  padding: 8px 10px;
+  border: 1px solid var(--border);
+  border-radius: 8px;
+  background: transparent;
+  color: var(--muted);
+  font-size: 0.72rem;
+  letter-spacing: 0.08em;
+  text-transform: uppercase;
+}
+
+.generator-mode-tab.active {
+  color: var(--text);
+  border-color: var(--text);
+}
+
+.generator-hint code {
+  font-size: 0.82rem;
+}
+
+.vault-pagination {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 10px;
+  margin-top: 14px;
+  padding-top: 12px;
+  border-top: 1px solid var(--border);
+}
+
+.vault-pagination-meta {
+  font-size: 0.82rem;
+  text-align: center;
+  flex: 1;
 }
 
 .generated-row {
