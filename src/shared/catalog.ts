@@ -1,6 +1,6 @@
 /**
  * Offline-only catalog of categories + services.
- * No remote icons: each service has an emoji + brand color used for a local badge.
+ * Each service has an emoji + brand color badge; bundled SVG logos when available.
  * Hostnames are used to auto-detect a service from a URL (Chrome CSV import).
  */
 

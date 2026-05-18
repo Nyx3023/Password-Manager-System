@@ -1,4 +1,5 @@
-import { FormEvent, useState, type ReactNode } from "react";
+import { FormEvent, useEffect, useState, type ReactNode } from "react";
+import { autofillSupported, VaultAutofill } from "@/shared/vaultAutofill";
 import type { ImportMode, Person, PersonCategoryId } from "@/shared/types";
 import {
   exportVaultToDevice,
@@ -17,6 +18,7 @@ type SettingsModal =
   | "password"
   | "backup"
   | "csv"
+  | "autofill"
   | null;
 
 interface SettingsScreenProps {
@@ -94,6 +96,12 @@ function SettingsRow({
 
 export function SettingsScreen(props: SettingsScreenProps) {
   const [modal, setModal] = useState<SettingsModal>(null);
+  const [autofillEnabled, setAutofillEnabled] = useState(false);
+
+  useEffect(() => {
+    if (!autofillSupported()) return;
+    void VaultAutofill.isEnabled().then(({ enabled }) => setAutofillEnabled(enabled));
+  }, []);
 
   const [currentPw, setCurrentPw] = useState("");
   const [newPw, setNewPw] = useState("");
@@ -191,6 +199,20 @@ export function SettingsScreen(props: SettingsScreenProps) {
         />
       </section>
 
+      {autofillSupported() && (
+        <section className="settings-group">
+          <SettingsRow
+            label="Android autofill"
+            hint={
+              autofillEnabled
+                ? "Set up Chrome if Google still appears"
+                : "Required — then configure Chrome"
+            }
+            onClick={() => setModal("autofill")}
+          />
+        </section>
+      )}
+
       <section className="settings-group">
         <SettingsRow
           label="Biometric unlock"
@@ -233,6 +255,56 @@ export function SettingsScreen(props: SettingsScreenProps) {
       )}
 
       {props.error && <p className="error">{props.error}</p>}
+
+      <Modal title="Autofill setup" open={modal === "autofill"} onClose={closeModal}>
+        <div className="stack autofill-setup">
+          <p className="setup-sub">
+            Chrome uses <strong>Google Password Manager</strong> by default. You
+            must change <strong>two</strong> settings so Password Manager can
+            fill logins in Chrome.
+          </p>
+
+          <ol className="autofill-steps">
+            <li>
+              <strong>Android system</strong> — set Password Manager as the
+              default autofill service.
+            </li>
+            <li>
+              <strong>Chrome</strong> — open Chrome → <strong>Settings</strong>{" "}
+              → <strong>Autofill services</strong> (or{" "}
+              <strong>Passwords and autofill</strong>) → choose{" "}
+              <strong>Autofill using another service</strong> (wording may vary).
+            </li>
+            <li>
+              Restart Chrome, unlock your vault in this app, then tap a login
+              field on a website.
+            </li>
+          </ol>
+
+          <p className="muted small">
+            If you do not see that Chrome option, update Chrome from the Play
+            Store (Chrome 131+). Older versions only support Google autofill in
+            the browser.
+          </p>
+
+          <p className="muted small">
+            Optional: in Chrome&apos;s address bar, open{" "}
+            <code>chrome://flags/#enable-autofill-virtual-view-structure</code>{" "}
+            and enable it, then restart Chrome.
+          </p>
+
+          <button
+            type="button"
+            className="primary block"
+            onClick={() => void VaultAutofill.openSettings()}
+          >
+            Open Android autofill settings
+          </button>
+          <button type="button" className="ghost block" onClick={closeModal}>
+            Done
+          </button>
+        </div>
+      </Modal>
 
       <Modal title="People" open={modal === "people"} onClose={closeModal}>
         <PeopleManager

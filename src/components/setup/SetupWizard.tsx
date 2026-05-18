@@ -1,6 +1,5 @@
 import { useState } from "react";
 import { isBiometricAvailable } from "@/shared/biometrics";
-import type { DownloadProgress } from "@/shared/iconCache";
 import { PERSON_CATEGORIES } from "@/shared/people";
 import type { PersonCategoryId } from "@/shared/types";
 import { MpinConfirmFlow } from "../MpinConfirmFlow";
@@ -23,14 +22,11 @@ export interface SetupData {
 interface SetupWizardProps {
   busy: boolean;
   error: string | null;
-  onComplete: (
-    data: SetupData,
-    onIconProgress: (p: DownloadProgress) => void,
-  ) => Promise<boolean>;
+  onComplete: (data: SetupData) => Promise<boolean>;
   onRestoreBackup: (content: string, password: string) => Promise<boolean>;
 }
 
-const STEPS = ["people", "password", "biometric", "mpin", "icons"] as const;
+const STEPS = ["people", "password", "biometric", "mpin"] as const;
 type Step = (typeof STEPS)[number];
 
 export function SetupWizard({
@@ -54,10 +50,6 @@ export function SetupWizard({
 
   const passwordValid = validateMasterPassword(password).valid;
 
-  const [iconProgress, setIconProgress] = useState<DownloadProgress | null>(
-    null,
-  );
-
   const stepIndex = STEPS.indexOf(step);
 
   const addPerson = () => {
@@ -75,9 +67,6 @@ export function SetupWizard({
   };
 
   const startFinish = async () => {
-    setStep("icons");
-    setIconProgress({ done: 0, total: 1 });
-
     const data: SetupData = {
       people,
       password,
@@ -85,7 +74,7 @@ export function SetupWizard({
       mpin,
     };
 
-    await onComplete(data, setIconProgress);
+    await onComplete(data);
   };
 
   return (
@@ -98,10 +87,10 @@ export function SetupWizard({
           ))}
         </div>
         <div className="setup-steps">
-          {STEPS.slice(0, 4).map((s, i) => (
+          {STEPS.map((s, i) => (
             <span
               key={s}
-              className={`setup-step-dot${i <= Math.min(stepIndex, 3) ? " on" : ""}`}
+              className={`setup-step-dot${i <= stepIndex ? " on" : ""}`}
             />
           ))}
         </div>
@@ -295,52 +284,23 @@ export function SetupWizard({
             {mpin.length === 8 && (
               <p className="muted small center-text">MPIN set</p>
             )}
+            {error && <p className="error">{error}</p>}
             <button
               type="button"
               className="primary block"
               disabled={busy || mpin.length !== 8}
               onClick={() => void startFinish()}
             >
-              Finish setup
+              {busy ? "Setting up…" : "Finish setup"}
             </button>
             <button
               type="button"
               className="ghost block"
+              disabled={busy}
               onClick={() => setStep("biometric")}
             >
               Back
             </button>
-          </>
-        )}
-
-        {step === "icons" && (
-          <>
-            <h1 className="setup-title">Downloading logos</h1>
-            <p className="setup-sub">
-              One-time download while online. After this, the app stays offline
-              until you add a new service.
-            </p>
-            <div className="setup-card icon-progress-card">
-              <div className="progress-bar">
-                <div
-                  className="progress-fill"
-                  style={{
-                    width: iconProgress
-                      ? `${Math.round((iconProgress.done / Math.max(iconProgress.total, 1)) * 100)}%`
-                      : "0%",
-                  }}
-                />
-              </div>
-              <p className="label-mono center-text">
-                {iconProgress
-                  ? `${iconProgress.done} / ${iconProgress.total}`
-                  : "Starting..."}
-              </p>
-              {busy && (
-                <p className="muted small center-text">Securing your vault...</p>
-              )}
-            </div>
-            {error && <p className="error">{error}</p>}
           </>
         )}
       </main>

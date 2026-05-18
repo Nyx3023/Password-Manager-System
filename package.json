@@ -10,7 +10,8 @@
     "build:android": "npm run build && npx cap sync android",
     "cap:add": "npx cap add android",
     "cap:open": "npx cap open android",
-    "preview": "vite preview"
+    "preview": "vite preview",
+    "icons:download": "node scripts/download-icons.mjs"
   },
   "dependencies": {
     "@capacitor/android": "^7.2.0",
@@ -19,6 +20,7 @@
     "@capacitor/share": "^7.0.1",
     "@capawesome/capacitor-file-picker": "^7.2.0",
     "@capgo/capacitor-native-biometric": "^7.1.0",
+    "vault-autofill": "file:plugins/vault-autofill",
     "hash-wasm": "^4.12.0",
     "react": "^19.1.0",
     "react-dom": "^19.1.0"

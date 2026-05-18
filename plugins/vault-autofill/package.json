@@ -1,0 +1,10 @@
+{
+  "name": "vault-autofill",
+  "version": "1.0.0",
+  "description": "Android AutofillService for Password Manager vault",
+  "capacitor": {
+    "android": {
+      "src": "android"
+    }
+  }
+}

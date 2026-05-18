@@ -1,6 +1,6 @@
-import { useEffect, useState } from "react";
+import { useState } from "react";
 import { getSubcategory } from "@/shared/catalog";
-import { getCachedIconDataUrl, ensureIconCached } from "@/shared/iconCache";
+import { getBundledIconUrl } from "@/shared/iconCache";
 
 interface ServiceIconProps {
   categoryId: string;
@@ -14,30 +14,8 @@ export function ServiceIcon({
   size = "md",
 }: ServiceIconProps) {
   const sub = getSubcategory(categoryId, subcategoryId);
-  const [logoUrl, setLogoUrl] = useState<string | null>(null);
+  const logoUrl = getBundledIconUrl(subcategoryId) ?? null;
   const [failed, setFailed] = useState(false);
-
-  useEffect(() => {
-    let cancelled = false;
-    setFailed(false);
-    setLogoUrl(null);
-
-    void (async () => {
-      const cached = await getCachedIconDataUrl(subcategoryId);
-      if (cancelled) return;
-      if (cached) {
-        setLogoUrl(cached);
-        return;
-      }
-      await ensureIconCached(categoryId, subcategoryId);
-      const after = await getCachedIconDataUrl(subcategoryId);
-      if (!cancelled && after) setLogoUrl(after);
-    })();
-
-    return () => {
-      cancelled = true;
-    };
-  }, [categoryId, subcategoryId]);
 
   const showLogo = logoUrl && !failed;
   const color = sub?.color ?? "333333";

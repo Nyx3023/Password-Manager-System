@@ -2,28 +2,42 @@ import { Capacitor } from "@capacitor/core";
 import { Directory, Encoding, Filesystem } from "@capacitor/filesystem";
 
 const VAULT_FILE = "vault.enc.json";
+const VAULT_BACKUP_FILE = "vault.enc.json.bak";
+const VAULT_TEMP_FILE = "vault.enc.json.tmp";
 const PREFS_FILE = "app.prefs.json";
 
 export interface AppPrefs {
   biometricsEnabled: boolean;
-  /** True after first-time icon download finished. */
-  iconsBootstrapped: boolean;
   setupComplete: boolean;
 }
 
 const defaultPrefs: AppPrefs = {
   biometricsEnabled: false,
-  iconsBootstrapped: false,
   setupComplete: false,
 };
 
-export async function loadVaultFile(): Promise<string | null> {
+function isValidVaultEnvelope(raw: string): boolean {
+  try {
+    const obj = JSON.parse(raw) as Record<string, unknown>;
+    return (
+      obj.kdf === "argon2id" &&
+      obj.cipher === "aes-256-gcm" &&
+      typeof obj.ciphertext === "string" &&
+      typeof obj.iv === "string" &&
+      (obj.version === 1 || obj.version === 2)
+    );
+  } catch {
+    return false;
+  }
+}
+
+async function readDataFile(path: string): Promise<string | null> {
   if (!Capacitor.isNativePlatform()) {
-    return localStorage.getItem(VAULT_FILE);
+    return localStorage.getItem(path);
   }
   try {
     const result = await Filesystem.readFile({
-      path: VAULT_FILE,
+      path,
       directory: Directory.Data,
       encoding: Encoding.UTF8,
     });
@@ -33,17 +47,66 @@ export async function loadVaultFile(): Promise<string | null> {
   }
 }
 
-export async function saveVaultFile(content: string): Promise<void> {
+async function writeDataFile(path: string, content: string): Promise<void> {
   if (!Capacitor.isNativePlatform()) {
-    localStorage.setItem(VAULT_FILE, content);
+    localStorage.setItem(path, content);
     return;
   }
   await Filesystem.writeFile({
-    path: VAULT_FILE,
+    path,
     directory: Directory.Data,
     data: content,
     encoding: Encoding.UTF8,
   });
+}
+
+async function deleteDataFile(path: string): Promise<void> {
+  if (!Capacitor.isNativePlatform()) {
+    localStorage.removeItem(path);
+    return;
+  }
+  try {
+    await Filesystem.deleteFile({ path, directory: Directory.Data });
+  } catch {
+    /* already gone */
+  }
+}
+
+export async function loadVaultFile(): Promise<string | null> {
+  const primary = await readDataFile(VAULT_FILE);
+  if (primary && isValidVaultEnvelope(primary)) {
+    return primary;
+  }
+
+  const backup = await readDataFile(VAULT_BACKUP_FILE);
+  if (backup && isValidVaultEnvelope(backup)) {
+    await writeDataFile(VAULT_FILE, backup);
+    return backup;
+  }
+
+  const temp = await readDataFile(VAULT_TEMP_FILE);
+  if (temp && isValidVaultEnvelope(temp)) {
+    await writeDataFile(VAULT_FILE, temp);
+    await deleteDataFile(VAULT_TEMP_FILE);
+    return temp;
+  }
+
+  return primary;
+}
+
+export async function saveVaultFile(content: string): Promise<void> {
+  if (!isValidVaultEnvelope(content)) {
+    throw new Error("Refusing to save an invalid vault file.");
+  }
+
+  const current = await readDataFile(VAULT_FILE);
+  if (current && isValidVaultEnvelope(current)) {
+    await writeDataFile(VAULT_BACKUP_FILE, current);
+  }
+
+  await writeDataFile(VAULT_TEMP_FILE, content);
+  await writeDataFile(VAULT_FILE, content);
+  await deleteDataFile(VAULT_TEMP_FILE);
 }
 
 export async function vaultExists(): Promise<boolean> {
@@ -86,17 +149,14 @@ export async function savePrefs(prefs: AppPrefs): Promise<void> {
 export async function resetAllAppData(): Promise<void> {
   if (!Capacitor.isNativePlatform()) {
     localStorage.removeItem(VAULT_FILE);
+    localStorage.removeItem(VAULT_BACKUP_FILE);
+    localStorage.removeItem(VAULT_TEMP_FILE);
     localStorage.removeItem(PREFS_FILE);
-    localStorage.removeItem("icons_bootstrapped");
     return;
   }
 
-  for (const path of [VAULT_FILE, PREFS_FILE]) {
-    try {
-      await Filesystem.deleteFile({ path, directory: Directory.Data });
-    } catch {
-      /* already gone */
-    }
+  for (const path of [VAULT_FILE, VAULT_BACKUP_FILE, VAULT_TEMP_FILE, PREFS_FILE]) {
+    await deleteDataFile(path);
   }
 
   try {

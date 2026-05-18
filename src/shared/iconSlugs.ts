@@ -1,4 +1,4 @@
-/** Simple Icons slug per service id (used only during one-time / on-demand download). */
+/** Simple Icons slug per service id (bundled under src/assets/icons/). */
 export const ICON_SLUGS: Record<string, string> = {
   facebook: "facebook",
   instagram: "instagram",
@@ -14,7 +14,6 @@ export const ICON_SLUGS: Record<string, string> = {
   threads: "threads",
   gmail: "gmail",
   outlook: "microsoftoutlook",
-  yahoo: "yahoo",
   protonmail: "protonmail",
   icloud: "icloud",
   paypal: "paypal",
@@ -24,10 +23,7 @@ export const ICON_SLUGS: Record<string, string> = {
   amazon: "amazon",
   ebay: "ebay",
   shopee: "shopee",
-  lazada: "lazada",
   alibaba: "alibabacloud",
-  gcash: "gcash",
-  maya: "paymaya",
   steam: "steam",
   epic: "epicgames",
   playstation: "playstation",
@@ -39,7 +35,6 @@ export const ICON_SLUGS: Record<string, string> = {
   spotify: "spotify",
   youtube: "youtube",
   twitch: "twitch",
-  disney: "disneyplus",
   prime: "primevideo",
   google: "google",
   microsoft: "microsoft",

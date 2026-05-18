@@ -4,13 +4,14 @@ Offline encrypted password vault for Android with **biometric unlock**, **export
 
 ## Features
 
-- Fully **offline** — no accounts, no cloud, no internet required
+- Fully **offline** — no accounts, no cloud, no internet required (service logos bundled in the app)
 - **Master password** + optional **fingerprint / face** unlock
 - Encrypted vault (Argon2id + AES-256-GCM)
 - Add, edit, search, delete password entries
 - Password generator
 - **Export** encrypted backup (`.pms` file)
 - **Import** backup (merge or replace)
+- **Android autofill** — fill usernames/passwords in Chrome and other apps (Android 8+)
 - Auto-lock after 5 minutes
 - Clipboard clears copied passwords after 30 seconds
 
@@ -40,6 +41,45 @@ npm run dev
 ```
 
 Opens at `http://localhost:5173`. Biometrics and native file picker only work on a real Android build.
+
+### Refreshing service logos (maintainers)
+
+Logos ship in `src/assets/icons/`. To re-download from Simple Icons after editing `src/shared/iconSlugs.ts`:
+
+```bash
+npm run icons:download
+npm run build
+```
+
+## Android autofill
+
+### 1. System (all apps)
+
+1. Build and install the app (`npm run build:android`, then build APK in Android Studio).
+2. **System Settings → Passwords, passkeys & accounts** (or **Passwords & autofill**) → set **Password Manager** as the preferred autofill service.
+3. Unlock the vault in the app (autofill only works while the vault is unlocked).
+
+### 2. Google Chrome (required separately)
+
+Chrome does **not** use your Android autofill choice by default — it uses **Google Password Manager** until you change it:
+
+1. Open **Chrome** → **Settings** → **Autofill services** (on some versions: **Passwords and autofill**).
+2. Select **Autofill using another service** (not Google / “Use Google”).
+3. Restart Chrome.
+
+Requires **Chrome 131+** from the Play Store. If the option is missing, update Chrome.
+
+Optional on older builds: enable `chrome://flags/#enable-autofill-virtual-view-structure`, restart Chrome, then set the autofill option above.
+
+### Using autofill
+
+Tap a **username or password field** on a login page (not the address bar). Pick an entry from the Password Manager sheet.
+
+Entries match by **website URL** and catalog domains (e.g. `instagram.com`). If nothing matches, all logins are offered while the vault is unlocked.
+
+In-app help: **Settings → Android autofill**.
+
+Requires **Android 8.0 (API 26)** or newer.
 
 ## Export / import
 

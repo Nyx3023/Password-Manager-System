@@ -5,12 +5,14 @@ import {
   generateVaultKey,
   toBase64,
   unwrapVaultKey,
+  VAULT_KEY_LENGTH,
   wrapVaultKey,
 } from "./crypto";
 import {
   disableBiometricUnlock,
   enableBiometricUnlock,
 } from "./biometrics";
+import { VaultDecryptError } from "./vaultErrors";
 import { loadPrefs, loadVaultFile, savePrefs, saveVaultFile } from "./storage";
 import { normalizePayload } from "./entryUtils";
 import type {
@@ -96,10 +98,21 @@ async function buildMasterWrap(
 async function decryptPayloadFromFile(
   vaultKey: Uint8Array,
   file: EncryptedVaultFile,
+  options?: { biometric?: boolean },
 ): Promise<VaultPayload> {
-  const json = await decryptPayload(vaultKey, file.iv, file.ciphertext);
-  const payload = JSON.parse(json) as VaultPayload;
-  return normalizePayload(payload);
+  let json: string;
+  try {
+    json = await decryptPayload(vaultKey, file.iv, file.ciphertext);
+  } catch {
+    throw new VaultDecryptError("payload", { biometric: options?.biometric });
+  }
+
+  try {
+    const payload = JSON.parse(json) as VaultPayload;
+    return normalizePayload(payload);
+  } catch {
+    throw new VaultDecryptError("json", { biometric: options?.biometric });
+  }
 }
 
 export class VaultService {
@@ -202,13 +215,34 @@ export class VaultService {
     this.file = file;
   }
 
-  async unlockWithVaultKey(vaultKey: Uint8Array): Promise<void> {
+  async unlockWithVaultKey(
+    vaultKey: Uint8Array,
+    options?: { biometric?: boolean },
+  ): Promise<void> {
+    if (vaultKey.length !== VAULT_KEY_LENGTH) {
+      if (options?.biometric) {
+        await this.disableBiometrics();
+      }
+      throw new VaultDecryptError("payload", { biometric: options?.biometric });
+    }
+
     const raw = await loadVaultFile();
     if (!raw) throw new Error("No vault found on this device.");
     const file = parseEncryptedFile(raw);
-    this.vaultKey = vaultKey;
-    this.payload = await decryptPayloadFromFile(vaultKey, file);
-    this.file = file;
+
+    try {
+      this.vaultKey = vaultKey;
+      this.payload = await decryptPayloadFromFile(vaultKey, file, options);
+      this.file = file;
+    } catch (e) {
+      this.vaultKey = null;
+      this.payload = null;
+      this.file = null;
+      if (options?.biometric && e instanceof VaultDecryptError) {
+        await this.disableBiometrics();
+      }
+      throw e;
+    }
   }
 
   lock(): void {

@@ -5,6 +5,7 @@ import { VaultScreen } from "@/components/VaultScreen";
 import { useAutoLock } from "@/hooks/useAutoLock";
 import { useClipboard } from "@/hooks/useClipboard";
 import { useVault } from "@/hooks/useVault";
+import { autofillSupported, VaultAutofill } from "@/shared/vaultAutofill";
 
 const AUTO_LOCK_MS = 5 * 60 * 1000;
 
@@ -17,6 +18,39 @@ export default function App() {
     void vault.init();
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, []);
+
+  useEffect(() => {
+    if (!autofillSupported()) return;
+
+    const listener = VaultAutofill.addListener("autofillUnlockRequired", () => {
+      if (vault.unlocked) {
+        void VaultAutofill.notifyUnlocked();
+      }
+    });
+
+    void VaultAutofill.getPendingAuthentication().then(({ pending }) => {
+      if (pending && vault.unlocked) {
+        void VaultAutofill.notifyUnlocked();
+      }
+    });
+
+    return () => {
+      void listener.then((h) => h.remove());
+    };
+  }, [vault.unlocked]);
+
+  useEffect(() => {
+    if (!autofillSupported() || !vault.unlocked) return;
+
+    const onVisible = () => {
+      if (document.visibilityState === "visible") {
+        void VaultAutofill.notifyUnlocked();
+      }
+    };
+
+    document.addEventListener("visibilitychange", onVisible);
+    return () => document.removeEventListener("visibilitychange", onVisible);
+  }, [vault.unlocked]);
 
   useAutoLock(vault.unlocked, AUTO_LOCK_MS, vault.lock);
 

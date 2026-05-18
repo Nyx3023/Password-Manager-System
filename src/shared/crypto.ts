@@ -45,7 +45,9 @@ async function deriveKey(
 }
 
 function asBuffer(bytes: Uint8Array): ArrayBuffer {
-  return new Uint8Array(bytes).buffer;
+  const copy = new Uint8Array(bytes.byteLength);
+  copy.set(bytes);
+  return copy.buffer;
 }
 
 async function importAesKey(keyBytes: Uint8Array): Promise<CryptoKey> {
@@ -141,18 +143,19 @@ export async function decryptPayload(
   iv: string,
   ciphertext: string,
 ): Promise<string> {
-  const key = await importAesKey(vaultKey);
-  try {
-    const decrypted = await aesDecrypt(
-      key,
-      fromBase64(iv),
-      fromBase64(ciphertext),
-    );
-    return new TextDecoder().decode(decrypted);
-  } catch {
-    throw new Error("Vault data is corrupted.");
+  if (vaultKey.length !== 32) {
+    throw new Error("Invalid vault key length.");
   }
+  const key = await importAesKey(vaultKey);
+  const decrypted = await aesDecrypt(
+    key,
+    fromBase64(iv),
+    fromBase64(ciphertext),
+  );
+  return new TextDecoder().decode(decrypted);
 }
+
+export const VAULT_KEY_LENGTH = 32;
 
 export function generateVaultKey(): Uint8Array {
   return randomBytes(32);

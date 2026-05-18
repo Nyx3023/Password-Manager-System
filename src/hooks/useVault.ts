@@ -3,10 +3,12 @@ import type { SetupData } from "@/components/setup/SetupWizard";
 import {
   disableBiometricUnlock,
   isBiometricAvailable,
+  repairBiometricPrefsIfNeeded,
   unlockWithBiometric,
 } from "@/shared/biometrics";
+import { isVaultDecryptError } from "@/shared/vaultErrors";
+import { clearAutofillSession, syncAutofillSession } from "@/shared/autofillSync";
 import { chromeRowToEntry, parseChromeCsv } from "@/shared/chromeCsv";
-import { downloadAllCatalogIcons, type DownloadProgress } from "@/shared/iconCache";
 import { validateMasterPassword } from "@/shared/passwordPolicy";
 import { loadPrefs, resetAllAppData, savePrefs } from "@/shared/storage";
 import { VaultService } from "@/shared/vaultService";
@@ -36,9 +38,13 @@ export function useVault() {
     setUnlocked(service.isUnlocked);
     // MPIN presence must come from disk (refreshMeta / setMpin / removeMpin).
     // service.hasMpin is false while the vault is locked even if MPIN exists.
+    if (service.isUnlocked) {
+      void syncAutofillSession(service.entries, service.people);
+    }
   }, [service]);
 
   const refreshMeta = useCallback(async () => {
+    const repairedBiometrics = await repairBiometricPrefsIfNeeded();
     const [exists, prefs, bioAvailable, hasMpin] = await Promise.all([
       service.exists(),
       service.getPrefs(),
@@ -46,7 +52,9 @@ export function useVault() {
       service.hasMpinOnDisk(),
     ]);
     setHasVault(exists);
-    setBiometricsEnabled(prefs.biometricsEnabled);
+    setBiometricsEnabled(
+      repairedBiometrics ? false : prefs.biometricsEnabled,
+    );
     setBiometricsAvailable(bioAvailable);
     setMpinEnabled(hasMpin);
     sync();
@@ -61,7 +69,7 @@ export function useVault() {
   // Create / unlock / lock
   // ============================================================
   const completeSetup = useCallback(
-    async (data: SetupData, onIconProgress: (p: DownloadProgress) => void) => {
+    async (data: SetupData) => {
       setError(null);
       setBusy(true);
       try {
@@ -84,11 +92,8 @@ export function useVault() {
         }
         await service.setMpin(data.mpin);
 
-        await downloadAllCatalogIcons(onIconProgress);
-
         const prefs = await loadPrefs();
         prefs.setupComplete = true;
-        prefs.iconsBootstrapped = true;
         await savePrefs(prefs);
 
         setHasVault(true);
@@ -147,12 +152,23 @@ export function useVault() {
     setBusy(true);
     try {
       const vaultKey = await unlockWithBiometric();
-      await service.unlockWithVaultKey(vaultKey);
-      vaultKey.fill(0);
+      try {
+        await service.unlockWithVaultKey(vaultKey, { biometric: true });
+      } finally {
+        vaultKey.fill(0);
+      }
+      const prefs = await service.getPrefs();
+      setBiometricsEnabled(prefs.biometricsEnabled);
       sync();
       return true;
-    } catch {
-      setError(null);
+    } catch (e) {
+      const prefs = await service.getPrefs();
+      setBiometricsEnabled(prefs.biometricsEnabled);
+      if (isVaultDecryptError(e) || (e instanceof Error && e.message.includes("Biometric"))) {
+        setError(e instanceof Error ? e.message : "Biometric unlock failed.");
+      } else {
+        setError(e instanceof Error ? e.message : "Biometric unlock failed.");
+      }
       return false;
     } finally {
       setBusy(false);
@@ -160,6 +176,7 @@ export function useVault() {
   }, [service, sync]);
 
   const lock = useCallback(() => {
+    void clearAutofillSession();
     service.lock();
     setUnlocked(false);
     setEntries([]);
@@ -172,6 +189,7 @@ export function useVault() {
     setBusy(true);
     try {
       service.lock();
+      await clearAutofillSession();
       await disableBiometricUnlock();
       await resetAllAppData();
       setHasVault(false);
