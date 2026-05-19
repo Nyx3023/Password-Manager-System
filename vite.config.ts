@@ -2,8 +2,11 @@ import { defineConfig } from "vite";
 import react from "@vitejs/plugin-react";
 import path from "node:path";
 
-export default defineConfig({
+export default defineConfig(({ mode }) => ({
   plugins: [react()],
+  define: {
+    "import.meta.env.VITE_DESKTOP": JSON.stringify(mode === "desktop"),
+  },
   resolve: {
     alias: {
       "@": path.resolve(__dirname, "src"),
@@ -18,4 +21,4 @@ export default defineConfig({
     port: 5173,
     strictPort: true,
   },
-});
+}));

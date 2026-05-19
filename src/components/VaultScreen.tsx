@@ -64,6 +64,17 @@ interface VaultScreenProps {
   onImportChromeCsv: (csv: string, personId: string) => Promise<number>;
   onMessage: (message: string) => void;
   onResetApp: () => Promise<boolean>;
+  onPullFromPc?: (
+    host: string,
+    port: number,
+    pairingCode: string,
+  ) => Promise<{ ok: boolean; message: string }>;
+  onPushToPc?: (
+    host: string,
+    port: number,
+    pairingCode: string,
+    force?: boolean,
+  ) => Promise<{ ok: boolean; message: string }>;
 }
 
 export function VaultScreen(props: VaultScreenProps) {
@@ -137,6 +148,8 @@ export function VaultScreen(props: VaultScreenProps) {
             onImportChromeCsv={props.onImportChromeCsv}
             onMessage={props.onMessage}
             onResetApp={props.onResetApp}
+            onPullFromPc={props.onPullFromPc}
+            onPushToPc={props.onPushToPc}
           />
         ) : editing && selected ? (
           <EntryForm

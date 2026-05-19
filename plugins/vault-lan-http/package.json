@@ -1,0 +1,10 @@
+{
+  "name": "vault-lan-http",
+  "version": "1.0.0",
+  "description": "LAN HTTP client for vault sync on Android",
+  "capacitor": {
+    "android": {
+      "src": "android"
+    }
+  }
+}

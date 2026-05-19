@@ -1,0 +1,305 @@
+/* Desktop shell - Nothing-themed layout for Electron */
+
+.desktop-loading,
+.desktop-auth {
+  min-height: 100vh;
+  display: grid;
+  place-items: center;
+  background: var(--bg);
+}
+
+.desktop-auth-card {
+  width: min(420px, 92vw);
+  max-height: 92vh;
+  overflow: auto;
+  padding: 1.5rem;
+  background: var(--panel);
+  border: 1px solid var(--border);
+  border-radius: var(--radius);
+}
+
+.desktop-shell {
+  display: grid;
+  grid-template-columns: 220px 1fr;
+  min-height: 100vh;
+  background: var(--bg);
+}
+
+.desktop-sidebar {
+  display: flex;
+  flex-direction: column;
+  gap: 1.25rem;
+  padding: 1.25rem 1rem;
+  border-right: 1px solid var(--border);
+  background: var(--bg-elevated);
+}
+
+.desktop-brand {
+  font-size: 0.7rem;
+  letter-spacing: 0.2em;
+  margin: 0;
+}
+
+.desktop-dots {
+  max-width: 120px;
+}
+
+.desktop-nav {
+  display: flex;
+  flex-direction: column;
+  gap: 0.35rem;
+}
+
+.desktop-nav button {
+  text-align: left;
+  padding: 0.65rem 0.75rem;
+  border-radius: var(--radius);
+  border: 1px solid transparent;
+  background: transparent;
+  color: var(--muted);
+  letter-spacing: 0.08em;
+  text-transform: uppercase;
+  font-size: 0.75rem;
+}
+
+.desktop-nav button:hover {
+  color: var(--text);
+  border-color: var(--border);
+}
+
+.desktop-nav button.active {
+  color: var(--text);
+  border-color: var(--accent);
+  background: #1a1a1a;
+}
+
+.desktop-sidebar-footer {
+  margin-top: auto;
+  padding: 0.75rem 0 0;
+  border-top: 1px solid var(--border);
+  width: 100%;
+  text-align: left;
+  background: none;
+  border-left: none;
+  border-right: none;
+  border-bottom: none;
+  cursor: pointer;
+  color: inherit;
+  font: inherit;
+}
+
+.desktop-sidebar-footer:hover {
+  opacity: 0.85;
+}
+
+.desktop-sidebar-lan-hint {
+  margin-top: 0.35rem;
+}
+
+.desktop-lan-panel {
+  padding: 1rem;
+}
+
+.desktop-lan-header {
+  display: flex;
+  align-items: flex-start;
+  justify-content: space-between;
+  gap: 1rem;
+  margin-bottom: 1rem;
+}
+
+.desktop-lan-title {
+  margin: 0 0 0.35rem;
+}
+
+.desktop-lan-badge {
+  flex-shrink: 0;
+  padding: 0.2rem 0.5rem;
+  border: 1px solid var(--border);
+  font-size: 0.7rem;
+  letter-spacing: 0.08em;
+  text-transform: uppercase;
+  color: var(--muted);
+}
+
+.desktop-lan-badge--on {
+  border-color: var(--accent);
+  color: var(--accent);
+}
+
+.desktop-lan-meta {
+  display: flex;
+  flex-direction: column;
+  gap: 0.5rem;
+  margin-bottom: 1rem;
+}
+
+.desktop-lan-row {
+  display: flex;
+  align-items: center;
+  gap: 0.5rem;
+  flex-wrap: wrap;
+}
+
+.desktop-lan-value {
+  font-family: var(--font-mono, monospace);
+  letter-spacing: 0.04em;
+}
+
+.desktop-lan-code-block {
+  padding: 0.75rem;
+  border: 1px solid var(--border);
+  margin-bottom: 1rem;
+}
+
+.desktop-lan-code {
+  font-size: 1.75rem;
+  letter-spacing: 0.2em;
+  margin: 0.35rem 0;
+  font-family: var(--font-mono, monospace);
+}
+
+.desktop-lan-code-hint {
+  margin: 0.5rem 0 0;
+}
+
+.desktop-lan-actions {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 0.5rem;
+}
+
+.desktop-lan-addresses {
+  border: 1px solid var(--border);
+  padding: 0.75rem;
+  margin-bottom: 1rem;
+  display: flex;
+  flex-direction: column;
+  gap: 0.5rem;
+}
+
+.desktop-lan-addr-hint {
+  margin: 0 0 0.25rem;
+}
+
+.desktop-lan-addr {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 0.5rem;
+  padding: 0.4rem 0.5rem;
+  border: 1px solid #1a1a1a;
+}
+
+.desktop-lan-addr--lan {
+  border-color: var(--accent);
+}
+
+.desktop-lan-addr--virtual {
+  opacity: 0.55;
+}
+
+.desktop-lan-addr-info {
+  display: flex;
+  flex-direction: column;
+  gap: 0.15rem;
+  min-width: 0;
+}
+
+.desktop-main {
+  display: flex;
+  flex-direction: column;
+  min-width: 0;
+}
+
+.desktop-topbar {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 1rem;
+  padding: 1rem 1.5rem;
+  border-bottom: 1px solid var(--border);
+}
+
+.desktop-topbar h1 {
+  margin: 0;
+  font-size: 1rem;
+  letter-spacing: 0.12em;
+  text-transform: uppercase;
+}
+
+.desktop-topbar-actions {
+  display: flex;
+  align-items: center;
+  gap: 0.5rem;
+}
+
+.desktop-content {
+  flex: 1;
+  min-height: 0;
+  overflow: auto;
+  padding: 1rem 1.5rem 1.5rem;
+}
+
+.desktop-toast {
+  margin: 0 1.5rem;
+}
+
+.desktop-vault-layout {
+  display: grid;
+  grid-template-columns: minmax(280px, 380px) 1fr;
+  gap: 1rem;
+  min-height: calc(100vh - 120px);
+}
+
+.desktop-list-pane {
+  display: flex;
+  flex-direction: column;
+  gap: 0.75rem;
+  min-width: 0;
+  border-right: 1px solid var(--border);
+  padding-right: 1rem;
+}
+
+.desktop-filter-row {
+  flex-wrap: wrap;
+}
+
+.desktop-detail-pane-wrap {
+  min-width: 0;
+  padding-left: 0.5rem;
+}
+
+.desktop-detail-pane {
+  max-width: 520px;
+}
+
+.desktop-detail-empty {
+  display: grid;
+  place-items: center;
+  min-height: 240px;
+  border: 1px dashed var(--border);
+  border-radius: var(--radius);
+}
+
+.desktop-detail-title {
+  margin: 0 0 0.25rem;
+  font-size: 1.1rem;
+  letter-spacing: 0.06em;
+}
+
+/* Hide mobile-only chrome in desktop settings */
+.desktop-content .settings {
+  max-width: 640px;
+}
+
+@media (max-width: 900px) {
+  .desktop-vault-layout {
+    grid-template-columns: 1fr;
+  }
+
+  .desktop-list-pane {
+    border-right: none;
+    padding-right: 0;
+  }
+}

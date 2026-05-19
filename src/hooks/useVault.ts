@@ -10,6 +10,7 @@ import { isVaultDecryptError } from "@/shared/vaultErrors";
 import { clearAutofillSession, syncAutofillSession } from "@/shared/autofillSync";
 import { chromeRowToEntry, parseChromeCsv } from "@/shared/chromeCsv";
 import { validateMasterPassword } from "@/shared/passwordPolicy";
+import { pullVaultFromPc, pushVaultToPc } from "@/shared/lanSync";
 import { loadPrefs, resetAllAppData, savePrefs } from "@/shared/storage";
 import { VaultService } from "@/shared/vaultService";
 import type {
@@ -440,6 +441,66 @@ export function useVault() {
     [service, sync],
   );
 
+  const reloadFromDiskAfterSync = useCallback(async () => {
+    setError(null);
+    try {
+      await service.reloadUnlockedFromDisk();
+      sync();
+      return true;
+    } catch (e) {
+      setError(e instanceof Error ? e.message : "Reload failed.");
+      return false;
+    }
+  }, [service, sync]);
+
+  const pullFromPc = useCallback(
+    async (host: string, port: number, pairingCode: string) => {
+      setError(null);
+      setBusy(true);
+      try {
+        const { content } = await pullVaultFromPc({ host, port, pairingCode });
+        await service.replaceUnlockedFromRaw(content);
+        sync();
+        return { ok: true, message: "Pulled vault from PC." };
+      } catch (e) {
+        const message = e instanceof Error ? e.message : "Pull failed.";
+        setError(message);
+        return { ok: false, message };
+      } finally {
+        setBusy(false);
+      }
+    },
+    [service, sync],
+  );
+
+  const pushToPc = useCallback(
+    async (host: string, port: number, pairingCode: string, force = false) => {
+      setError(null);
+      setBusy(true);
+      try {
+        const raw = await service.exportVault();
+        const result = await pushVaultToPc({
+          host,
+          port,
+          pairingCode,
+          vaultJson: raw,
+          force,
+        });
+        if (!result.ok) {
+          setError(result.message);
+        }
+        return result;
+      } catch (e) {
+        const message = e instanceof Error ? e.message : "Push failed.";
+        setError(message);
+        return { ok: false, message };
+      } finally {
+        setBusy(false);
+      }
+    },
+    [service],
+  );
+
   return {
     ready,
     hasVault,
@@ -471,6 +532,9 @@ export function useVault() {
     exportVault,
     importVault,
     importChromeCsv,
+    reloadFromDiskAfterSync,
+    pullFromPc,
+    pushToPc,
     setError,
     refreshMeta,
     resetApp,

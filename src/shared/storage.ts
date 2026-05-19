@@ -1,5 +1,6 @@
 import { Capacitor } from "@capacitor/core";
 import { Directory, Encoding, Filesystem } from "@capacitor/filesystem";
+import { isDesktopApp } from "./platform";
 
 const VAULT_FILE = "vault.enc.json";
 const VAULT_BACKUP_FILE = "vault.enc.json.bak";
@@ -31,7 +32,14 @@ function isValidVaultEnvelope(raw: string): boolean {
   }
 }
 
+function useElectronStorage(): boolean {
+  return isDesktopApp() && !!window.electronAPI?.readDataFile;
+}
+
 async function readDataFile(path: string): Promise<string | null> {
+  if (useElectronStorage()) {
+    return window.electronAPI!.readDataFile(path);
+  }
   if (!Capacitor.isNativePlatform()) {
     return localStorage.getItem(path);
   }
@@ -48,6 +56,10 @@ async function readDataFile(path: string): Promise<string | null> {
 }
 
 async function writeDataFile(path: string, content: string): Promise<void> {
+  if (useElectronStorage()) {
+    await window.electronAPI!.writeDataFile(path, content);
+    return;
+  }
   if (!Capacitor.isNativePlatform()) {
     localStorage.setItem(path, content);
     return;
@@ -61,6 +73,10 @@ async function writeDataFile(path: string, content: string): Promise<void> {
 }
 
 async function deleteDataFile(path: string): Promise<void> {
+  if (useElectronStorage()) {
+    await window.electronAPI!.deleteDataFile(path);
+    return;
+  }
   if (!Capacitor.isNativePlatform()) {
     localStorage.removeItem(path);
     return;
@@ -99,6 +115,11 @@ export async function saveVaultFile(content: string): Promise<void> {
     throw new Error("Refusing to save an invalid vault file.");
   }
 
+  if (useElectronStorage()) {
+    await window.electronAPI!.writeDataFile(VAULT_FILE, content);
+    return;
+  }
+
   const current = await readDataFile(VAULT_FILE);
   if (current && isValidVaultEnvelope(current)) {
     await writeDataFile(VAULT_BACKUP_FILE, current);
@@ -114,39 +135,23 @@ export async function vaultExists(): Promise<boolean> {
 }
 
 export async function loadPrefs(): Promise<AppPrefs> {
-  if (!Capacitor.isNativePlatform()) {
-    const raw = localStorage.getItem(PREFS_FILE);
-    return raw ? (JSON.parse(raw) as AppPrefs) : defaultPrefs;
-  }
-  try {
-    const result = await Filesystem.readFile({
-      path: PREFS_FILE,
-      directory: Directory.Data,
-      encoding: Encoding.UTF8,
-    });
-    if (typeof result.data !== "string") return defaultPrefs;
-    return { ...defaultPrefs, ...(JSON.parse(result.data) as AppPrefs) };
-  } catch {
-    return defaultPrefs;
-  }
+  const raw = await readDataFile(PREFS_FILE);
+  return raw ? { ...defaultPrefs, ...(JSON.parse(raw) as AppPrefs) } : defaultPrefs;
 }
 
 export async function savePrefs(prefs: AppPrefs): Promise<void> {
-  const content = JSON.stringify(prefs);
-  if (!Capacitor.isNativePlatform()) {
-    localStorage.setItem(PREFS_FILE, content);
-    return;
-  }
-  await Filesystem.writeFile({
-    path: PREFS_FILE,
-    directory: Directory.Data,
-    data: content,
-    encoding: Encoding.UTF8,
-  });
+  await writeDataFile(PREFS_FILE, JSON.stringify(prefs));
 }
 
 /** Wipe vault, prefs, and cached icons (development / factory reset). */
 export async function resetAllAppData(): Promise<void> {
+  if (useElectronStorage()) {
+    for (const path of [VAULT_FILE, VAULT_BACKUP_FILE, VAULT_TEMP_FILE, PREFS_FILE]) {
+      await deleteDataFile(path);
+    }
+    return;
+  }
+
   if (!Capacitor.isNativePlatform()) {
     localStorage.removeItem(VAULT_FILE);
     localStorage.removeItem(VAULT_BACKUP_FILE);

@@ -439,6 +439,27 @@ export class VaultService {
     await saveVaultFile(JSON.stringify(this.file));
   }
 
+  async reloadUnlockedFromDisk(): Promise<void> {
+    this.requireUnlocked();
+    const raw = await loadVaultFile();
+    if (!raw) {
+      throw new Error("No vault found on this device.");
+    }
+    const file = parseEncryptedFile(raw);
+    const payload = await decryptPayloadFromFile(this.vaultKey!, file);
+    this.file = file;
+    this.payload = payload;
+  }
+
+  async replaceUnlockedFromRaw(fileContent: string): Promise<void> {
+    this.requireUnlocked();
+    const incoming = parseEncryptedFile(fileContent);
+    const payload = await decryptPayloadFromFile(this.vaultKey!, incoming);
+    this.file = incoming;
+    this.payload = payload;
+    await saveVaultFile(fileContent);
+  }
+
   // ============================================================
   // Backup export / import
   // ============================================================

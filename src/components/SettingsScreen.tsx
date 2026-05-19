@@ -11,6 +11,11 @@ import { MpinConfirmFlow } from "./MpinConfirmFlow";
 import { PasswordRequirements } from "./PasswordRequirements";
 import { PeopleManager } from "./PeopleManager";
 import { validateMasterPassword } from "@/shared/passwordPolicy";
+import { fetchPcStatus, loadLanPrefs, saveLanPrefs } from "@/shared/lanSync";
+import {
+  DesktopLanPanel,
+  type DesktopLanPanelProps,
+} from "@/desktop/DesktopLanPanel";
 
 type SettingsModal =
   | "people"
@@ -19,6 +24,7 @@ type SettingsModal =
   | "backup"
   | "csv"
   | "autofill"
+  | "lan"
   | null;
 
 interface SettingsScreenProps {
@@ -56,6 +62,18 @@ interface SettingsScreenProps {
   onImportChromeCsv: (csv: string, personId: string) => Promise<number>;
   onMessage: (message: string) => void;
   onResetApp?: () => Promise<boolean>;
+  onPullFromPc?: (
+    host: string,
+    port: number,
+    pairingCode: string,
+  ) => Promise<{ ok: boolean; message: string }>;
+  onPushToPc?: (
+    host: string,
+    port: number,
+    pairingCode: string,
+    force?: boolean,
+  ) => Promise<{ ok: boolean; message: string }>;
+  desktopLan?: DesktopLanPanelProps;
 }
 
 function SettingsRow({
@@ -109,6 +127,17 @@ export function SettingsScreen(props: SettingsScreenProps) {
 
   const [importPw, setImportPw] = useState("");
   const [importMode, setImportMode] = useState<ImportMode>("merge");
+  const [lanHost, setLanHost] = useState("");
+  const [lanPort, setLanPort] = useState("9847");
+  const [lanCode, setLanCode] = useState("");
+  const [lanStatus, setLanStatus] = useState<string>("");
+
+  useEffect(() => {
+    const prefs = loadLanPrefs();
+    setLanHost(prefs.host);
+    setLanPort(String(prefs.port));
+    setLanCode(prefs.code);
+  }, []);
 
   const closeModal = () => {
     setModal(null);
@@ -116,6 +145,11 @@ export function SettingsScreen(props: SettingsScreenProps) {
     setNewPw("");
     setConfirmPw("");
     setImportPw("");
+  };
+
+  const persistLanPrefs = () => {
+    const port = Number(lanPort) || 9847;
+    saveLanPrefs(lanHost, port, lanCode);
   };
 
   const newPwValid = validateMasterPassword(newPw).valid;
@@ -169,8 +203,46 @@ export function SettingsScreen(props: SettingsScreenProps) {
     if (done) props.onMessage("App reset. First-time setup will start.");
   };
 
+  const handleLanStatus = async () => {
+    try {
+      persistLanPrefs();
+      const st = await fetchPcStatus(lanHost, Number(lanPort) || 9847);
+      setLanStatus(st.running ? `PC online at ${st.address}` : "PC LAN server is off.");
+    } catch (e) {
+      setLanStatus(e instanceof Error ? e.message : "Status check failed.");
+    }
+  };
+
+  const handlePull = async () => {
+    if (!props.onPullFromPc) return;
+    persistLanPrefs();
+    const result = await props.onPullFromPc(
+      lanHost,
+      Number(lanPort) || 9847,
+      lanCode,
+    );
+    props.onMessage(result.message);
+  };
+
+  const handlePush = async (force = false) => {
+    if (!props.onPushToPc) return;
+    persistLanPrefs();
+    const result = await props.onPushToPc(
+      lanHost,
+      Number(lanPort) || 9847,
+      lanCode,
+      force,
+    );
+    props.onMessage(result.message);
+  };
+
+  const showPhoneLanSync =
+    props.onPullFromPc && props.onPushToPc && !props.desktopLan;
+
   return (
     <div className="settings">
+      {props.desktopLan && <DesktopLanPanel {...props.desktopLan} />}
+
       <section className="settings-group">
         <SettingsRow
           label="People"
@@ -197,6 +269,13 @@ export function SettingsScreen(props: SettingsScreenProps) {
           hint="Import from CSV export"
           onClick={() => setModal("csv")}
         />
+        {showPhoneLanSync && (
+          <SettingsRow
+            label="Sync with PC"
+            hint="Pull or push over local Wi-Fi"
+            onClick={() => setModal("lan")}
+          />
+        )}
       </section>
 
       {autofillSupported() && (
@@ -438,6 +517,67 @@ export function SettingsScreen(props: SettingsScreenProps) {
           onImport={props.onImportChromeCsv}
           onMessage={props.onMessage}
         />
+      </Modal>
+
+      <Modal title="Sync with PC" open={modal === "lan"} onClose={closeModal}>
+        <div className="stack">
+          <label>
+            PC host or IP
+            <input
+              type="text"
+              value={lanHost}
+              onChange={(e) => setLanHost(e.target.value)}
+              placeholder="192.168.1.42"
+            />
+          </label>
+          <label>
+            Port
+            <input
+              type="number"
+              value={lanPort}
+              onChange={(e) => setLanPort(e.target.value)}
+              placeholder="9847"
+            />
+          </label>
+          <label>
+            Pairing code
+            <input
+              type="text"
+              inputMode="numeric"
+              value={lanCode}
+              onChange={(e) => setLanCode(e.target.value)}
+              placeholder="6-digit code from PC"
+            />
+          </label>
+          {lanStatus && <p className="muted small">{lanStatus}</p>}
+          <button type="button" className="ghost block" onClick={() => void handleLanStatus()}>
+            Check status
+          </button>
+          <button
+            type="button"
+            className="primary block"
+            disabled={props.busy}
+            onClick={() => void handlePull()}
+          >
+            Pull from PC
+          </button>
+          <button
+            type="button"
+            className="ghost block"
+            disabled={props.busy}
+            onClick={() => void handlePush(false)}
+          >
+            Push to PC
+          </button>
+          <button
+            type="button"
+            className="ghost block"
+            disabled={props.busy}
+            onClick={() => void handlePush(true)}
+          >
+            Force push to PC
+          </button>
+        </div>
       </Modal>
     </div>
   );
