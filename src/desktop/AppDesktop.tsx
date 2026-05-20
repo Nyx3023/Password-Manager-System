@@ -80,7 +80,11 @@ export default function AppDesktop() {
     if (!window.electronAPI) return;
     const st = await window.electronAPI.startLanServer();
     setLanStatus(st);
-    showToast(`LAN server on ${st.address}`);
+    if (st.error) {
+      showToast(st.error);
+      return;
+    }
+    showToast(st.running ? `LAN server on ${st.address}` : "Could not start LAN server.");
   }, [showToast]);
 
   const stopLan = useCallback(async () => {
@@ -154,6 +158,7 @@ export default function AppDesktop() {
             />
           ) : (
             <UnlockScreen
+              layout="desktop"
               busy={vault.busy}
               error={vault.error}
               biometricsEnabled={false}

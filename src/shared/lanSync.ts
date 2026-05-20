@@ -2,6 +2,8 @@ import { lanHttpAvailable, lanHttpRequest } from "./vaultLanHttp";
 
 const PREFS_HOST = "lan_sync_host";
 const PREFS_PORT = "lan_sync_port";
+const PREFS_CODE = "lan_sync_code";
+const PREFS_PAIRED = "lan_sync_paired";
 
 export interface LanServerStatus {
   running: boolean;
@@ -17,13 +19,51 @@ export interface LanSyncResult {
   etag?: string;
 }
 
-function normalizeHost(input: string): string {
-  return input.trim().replace(/^https?:\/\//i, "").replace(/\/+$/, "");
+/** Split host field; strips protocol, path, and optional :port. */
+export function parseLanEndpoint(
+  hostInput: string,
+  portInput: string | number,
+): { host: string; port: number } {
+  let raw = hostInput.trim();
+  if (!raw) return { host: "", port: Number(portInput) || 9847 };
+
+  raw = raw.replace(/^https?:\/\//i, "");
+  raw = raw.split("/")[0] ?? raw;
+  raw = raw.split("?")[0] ?? raw;
+  raw = raw.replace(/\/+$/, "");
+
+  let port = Number(portInput) || 9847;
+  const match = raw.match(/^([^:/]+):(\d+)$/);
+  if (match) {
+    raw = match[1]!.trim();
+    port = Number(match[2]) || port;
+  }
+
+  return { host: raw, port };
+}
+
+export function validateLanEndpoint(
+  host: string,
+  port: number,
+  pairingCode?: string,
+): string | null {
+  if (!host.trim()) {
+    return "Enter the PC IP address (example: 192.168.1.42).";
+  }
+  if (!/^\d{1,3}(\.\d{1,3}){3}$/.test(host.trim())) {
+    return "Enter a valid IPv4 address for the PC.";
+  }
+  if (port < 1 || port > 65535) {
+    return "Port must be between 1 and 65535.";
+  }
+  if (pairingCode !== undefined && !pairingCode.trim()) {
+    return "Enter the 6-digit pairing code from the PC.";
+  }
+  return null;
 }
 
 function baseUrl(host: string, port: number): string {
-  const h = normalizeHost(host);
-  return `http://${h}:${port}`;
+  return `http://${host.trim()}:${port}`;
 }
 
 function authHeaders(pairingCode: string): Record<string, string> {
@@ -37,14 +77,28 @@ export function loadLanPrefs(): { host: string; port: number; code: string } {
   return {
     host: localStorage.getItem(PREFS_HOST) ?? "",
     port: Number(localStorage.getItem(PREFS_PORT) ?? "9847") || 9847,
-    code: localStorage.getItem("lan_sync_code") ?? "",
+    code: localStorage.getItem(PREFS_CODE) ?? "",
   };
 }
 
 export function saveLanPrefs(host: string, port: number, code: string): void {
-  localStorage.setItem(PREFS_HOST, host);
+  localStorage.setItem(PREFS_HOST, host.trim());
   localStorage.setItem(PREFS_PORT, String(port));
-  localStorage.setItem("lan_sync_code", code);
+  localStorage.setItem(PREFS_CODE, code.trim());
+}
+
+export function markLanPaired(host: string, port: number, code: string): void {
+  saveLanPrefs(host, port, code);
+  localStorage.setItem(PREFS_PAIRED, "1");
+}
+
+export function isLanPaired(): boolean {
+  const prefs = loadLanPrefs();
+  return (
+    localStorage.getItem(PREFS_PAIRED) === "1" &&
+    !!prefs.host &&
+    /^\d{1,3}(\.\d{1,3}){3}$/.test(prefs.host)
+  );
 }
 
 let lastEtag: string | null = null;
@@ -61,6 +115,11 @@ export async function fetchPcStatus(
   host: string,
   port: number,
 ): Promise<LanServerStatus> {
+  const validation = validateLanEndpoint(host, port);
+  if (validation) {
+    throw new Error(validation);
+  }
+
   const res = await lanHttpRequest({
     url: `${baseUrl(host, port)}/api/status`,
     method: "GET",
@@ -89,6 +148,15 @@ export async function pullVaultFromPc(options: {
     throw new Error("LAN sync requires the Android app.");
   }
 
+  const validation = validateLanEndpoint(
+    options.host,
+    options.port,
+    options.pairingCode,
+  );
+  if (validation) {
+    throw new Error(validation);
+  }
+
   const res = await lanHttpRequest({
     url: `${baseUrl(options.host, options.port)}/api/vault`,
     method: "GET",
@@ -99,7 +167,9 @@ export async function pullVaultFromPc(options: {
     throw new Error(parseError(res.data) || "Invalid pairing code.");
   }
   if (res.status === 404) {
-    throw new Error("No vault on the PC yet. Push from the phone first or create a vault on the PC.");
+    throw new Error(
+      "No vault on the PC yet. Push from the phone first or create a vault on the PC.",
+    );
   }
   if (res.status !== 200) {
     throw new Error(parseError(res.data) || `Pull failed (${res.status}).`);
@@ -119,6 +189,15 @@ export async function pushVaultToPc(options: {
 }): Promise<LanSyncResult> {
   if (!lanHttpAvailable()) {
     return { ok: false, message: "LAN sync requires the Android app." };
+  }
+
+  const validation = validateLanEndpoint(
+    options.host,
+    options.port,
+    options.pairingCode,
+  );
+  if (validation) {
+    return { ok: false, message: validation };
   }
 
   const headers: Record<string, string> = {
@@ -163,4 +242,3 @@ export async function pushVaultToPc(options: {
 
   return { ok: true, message: "Vault sent to PC." };
 }
-

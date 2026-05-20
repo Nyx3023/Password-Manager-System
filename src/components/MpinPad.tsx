@@ -1,7 +1,8 @@
 interface MpinPadProps {
   value: string;
   length?: number;
-  size?: "default" | "large";
+  size?: "default" | "large" | "desktop";
+  disabled?: boolean;
   /** Shake dots and flash red (e.g. wrong MPIN). */
   errorFlash?: boolean;
   onChange: (value: string) => void;
@@ -16,12 +17,14 @@ export function MpinPad({
   length = 8,
   size = "default",
   errorFlash = false,
+  disabled = false,
   onChange,
   onComplete,
 }: MpinPadProps) {
   const dots = Array.from({ length });
 
   const press = (key: string) => {
+    if (disabled) return;
     if (key === "<") {
       onChange(value.slice(0, -1));
       return;
@@ -34,8 +37,15 @@ export function MpinPad({
     }
   };
 
+  const sizeClass =
+    size === "large"
+      ? " mpin-pad--large"
+      : size === "desktop"
+        ? " mpin-pad--desktop"
+        : "";
+
   return (
-    <div className={`mpin-pad${size === "large" ? " mpin-pad--large" : ""}`}>
+    <div className={`mpin-pad${sizeClass}${disabled ? " mpin-pad--disabled" : ""}`}>
       <div
         className={`mpin-dots${errorFlash ? " mpin-dots--error mpin-dots--shake" : ""}`}
       >
@@ -56,6 +66,7 @@ export function MpinPad({
               key={i}
               type="button"
               className="mpin-key"
+              disabled={disabled}
               onClick={() => press(key)}
             >
               {key === "<" ? "⌫" : key}

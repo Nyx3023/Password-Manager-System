@@ -128,8 +128,18 @@ function buildTrayMenu() {
         }
       : { type: "separator" },
     st.running
-      ? { label: "Stop LAN server", click: () => refreshTray(lan.stop()) }
-      : { label: "Start LAN server", click: () => refreshTray(lan.start()) },
+      ? {
+          label: "Stop LAN server",
+          click: () => {
+            void lan.stop().then((st) => refreshTray(st));
+          },
+        }
+      : {
+          label: "Start LAN server",
+          click: () => {
+            void lan.start().then((st) => refreshTray(st));
+          },
+        },
     { type: "separator" },
     {
       label: "Settings",
@@ -233,14 +243,14 @@ function registerIpc() {
 
   ipcMain.handle("tray:status", () => lan.status());
 
-  ipcMain.handle("lan:start", () => {
-    const st = lan.start();
+  ipcMain.handle("lan:start", async () => {
+    const st = await lan.start();
     refreshTray();
     return st;
   });
 
-  ipcMain.handle("lan:stop", () => {
-    const st = lan.stop();
+  ipcMain.handle("lan:stop", async () => {
+    const st = await lan.stop();
     refreshTray();
     return st;
   });

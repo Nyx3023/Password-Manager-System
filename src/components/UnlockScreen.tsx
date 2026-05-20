@@ -1,4 +1,5 @@
 import { FormEvent, useCallback, useEffect, useRef, useState } from "react";
+import { LoadingIndicator } from "./LoadingIndicator";
 import { MpinPad } from "./MpinPad";
 
 type UnlockMode = "mpin" | "recovery";
@@ -14,6 +15,8 @@ interface UnlockScreenProps {
   onUnlockBiometric: () => Promise<boolean>;
   onRestoreBackup: (content: string, password: string) => Promise<boolean>;
   onResetApp?: () => Promise<boolean>;
+  /** Desktop: compact card layout instead of full-screen mobile. */
+  layout?: "mobile" | "desktop";
 }
 
 export function UnlockScreen({
@@ -26,7 +29,9 @@ export function UnlockScreen({
   onUnlockMpin,
   onUnlockBiometric,
   onResetApp,
+  layout = "mobile",
 }: UnlockScreenProps) {
+  const isDesktop = layout === "desktop";
   const canUseBiometric = biometricsEnabled && biometricsAvailable;
 
   const [mode, setMode] = useState<UnlockMode>(() =>
@@ -76,8 +81,23 @@ export function UnlockScreen({
   };
 
   return (
-    <div className="screen unlock-screen unlock-screen--mpin">
+    <div
+      className={`screen unlock-screen unlock-screen--mpin${
+        isDesktop ? " unlock-screen--desktop" : ""
+      }`}
+    >
       <div className="unlock-mpin-center">
+        {busy && (
+          <div className="unlock-loading-overlay" aria-hidden={!busy}>
+            <LoadingIndicator
+              label={
+                mode === "mpin"
+                  ? "Unlocking..."
+                  : "Checking password..."
+              }
+            />
+          </div>
+        )}
         <p className="setup-brand">PASSWORD MANAGER</p>
         <div className="dot-matrix small" aria-hidden>
           {Array.from({ length: 12 }).map((_, i) => (
@@ -92,9 +112,10 @@ export function UnlockScreen({
           <>
             <p className="label-mono center-text">ENTER MPIN</p>
             <MpinPad
-              size="large"
+              size={isDesktop ? "desktop" : "large"}
               value={mpin}
               errorFlash={mpinErrorFlash}
+              disabled={busy}
               onChange={setMpin}
               onComplete={(code) => void tryMpinUnlock(code)}
             />
@@ -143,10 +164,14 @@ export function UnlockScreen({
                   autoFocus
                 />
               </label>
-              {error && <p className="error">{error}</p>}
-              <button type="submit" className="primary block" disabled={busy}>
-                {busy ? "Please wait..." : "Unlock with master password"}
-              </button>
+              {error && !busy && <p className="error">{error}</p>}
+              {busy ? (
+                <LoadingIndicator label="Unlocking..." />
+              ) : (
+                <button type="submit" className="primary block">
+                  Unlock with master password
+                </button>
+              )}
             </form>
             {mpinEnabled && (
               <button

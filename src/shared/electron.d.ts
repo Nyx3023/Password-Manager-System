@@ -13,6 +13,7 @@ export interface TrayStatus {
   addresses?: LanAddressCandidate[];
   pairingCode: string | null;
   lastSyncAt: string | null;
+  error?: string | null;
 }
 
 export interface ElectronAPI {

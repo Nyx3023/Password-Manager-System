@@ -10,8 +10,11 @@ import type {
 import { CategoryFilter } from "./CategoryFilter";
 import { EntryDetailModal } from "./EntryDetailModal";
 import { EntryForm } from "./EntryForm";
+import { Modal } from "./Modal";
 import { EntryList } from "./EntryList";
 import { PersonAvatar } from "./ServiceIcon";
+import { LanSyncModal } from "./LanSyncModal";
+import { SyncIcon, type SyncIconState } from "./SyncIcon";
 import { SettingsScreen } from "./SettingsScreen";
 import { AddEntryWizard } from "./wizard/AddEntryWizard";
 
@@ -85,6 +88,10 @@ export function VaultScreen(props: VaultScreenProps) {
   const [selected, setSelected] = useState<VaultEntry | null>(null);
   const [adding, setAdding] = useState(false);
   const [editing, setEditing] = useState(false);
+  const [lanSyncOpen, setLanSyncOpen] = useState(false);
+  const [syncVisual, setSyncVisual] = useState<SyncIconState>("idle");
+
+  const showLanSync = Boolean(props.onPullFromPc && props.onPushToPc);
 
   const categoryCounts = useMemo(() => {
     const counts: Record<string, number> = {};
@@ -115,9 +122,30 @@ export function VaultScreen(props: VaultScreenProps) {
       <header className="topbar">
         <div className="topbar-row">
           <h2>{tab === "vault" ? "Vault" : "Settings"}</h2>
-          <button type="button" className="ghost small" onClick={props.onLock}>
-            Lock
-          </button>
+          <div className="topbar-actions">
+            {showLanSync && tab === "vault" && (
+              <button
+                type="button"
+                className={`topbar-icon-btn topbar-sync-btn${
+                  syncVisual === "success"
+                    ? " topbar-sync-btn--success"
+                    : syncVisual === "error"
+                      ? " topbar-sync-btn--error"
+                      : ""
+                }`}
+                aria-label="Sync with PC"
+                onClick={() => {
+                  setSyncVisual("idle");
+                  setLanSyncOpen(true);
+                }}
+              >
+                <SyncIcon state={syncVisual} />
+              </button>
+            )}
+            <button type="button" className="ghost small" onClick={props.onLock}>
+              Lock
+            </button>
+          </div>
         </div>
         <p className="muted small topbar-meta">
           {props.entries.length} entries | {props.people.length} people
@@ -148,23 +176,7 @@ export function VaultScreen(props: VaultScreenProps) {
             onImportChromeCsv={props.onImportChromeCsv}
             onMessage={props.onMessage}
             onResetApp={props.onResetApp}
-            onPullFromPc={props.onPullFromPc}
-            onPushToPc={props.onPushToPc}
-          />
-        ) : editing && selected ? (
-          <EntryForm
-            initial={selected}
-            people={props.people}
-            onCancel={() => {
-              setEditing(false);
-              setSelected(null);
-            }}
-            onSave={async (data) => {
-              await props.onUpdate(selected.id, data);
-              setEditing(false);
-              setSelected(null);
-              props.onMessage("Updated.");
-            }}
+            onOpenLanSync={showLanSync ? () => setLanSyncOpen(true) : undefined}
           />
         ) : props.entries.length === 0 ? (
           <div className="vault-home-empty">
@@ -243,7 +255,7 @@ export function VaultScreen(props: VaultScreenProps) {
             />
 
             <EntryDetailModal
-              entry={selected}
+              entry={editing ? null : selected}
               people={props.people}
               onClose={() => setSelected(null)}
               onEdit={() => setEditing(true)}
@@ -273,6 +285,40 @@ export function VaultScreen(props: VaultScreenProps) {
         >
           <span className="fab-plus" aria-hidden />
         </button>
+      )}
+
+      <Modal
+        title="Edit password"
+        open={editing && !!selected}
+        onClose={() => {
+          setEditing(false);
+        }}
+      >
+        {selected && (
+          <EntryForm
+            initial={selected}
+            people={props.people}
+            onCancel={() => setEditing(false)}
+            onSave={async (data) => {
+              await props.onUpdate(selected.id, data);
+              setEditing(false);
+              setSelected(null);
+              props.onMessage("Updated.");
+            }}
+          />
+        )}
+      </Modal>
+
+      {showLanSync && props.onPullFromPc && props.onPushToPc && (
+        <LanSyncModal
+          open={lanSyncOpen}
+          busy={props.busy}
+          onClose={() => setLanSyncOpen(false)}
+          onSyncVisual={setSyncVisual}
+          onPull={props.onPullFromPc}
+          onPush={props.onPushToPc}
+          onMessage={props.onMessage}
+        />
       )}
 
       <nav className="bottom-nav" aria-label="Main">

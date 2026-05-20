@@ -463,7 +463,11 @@ export function useVault() {
         sync();
         return { ok: true, message: "Pulled vault from PC." };
       } catch (e) {
-        const message = e instanceof Error ? e.message : "Pull failed.";
+        let message = e instanceof Error ? e.message : "Pull failed.";
+        if (isVaultDecryptError(e)) {
+          message =
+            "PC vault cannot be opened with this phone's key. Use Push to PC to copy the phone vault to the PC, or import the same .pms backup on both devices first.";
+        }
         setError(message);
         return { ok: false, message };
       } finally {

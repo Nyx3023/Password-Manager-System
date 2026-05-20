@@ -55,6 +55,13 @@ function listLanCandidates() {
   return list;
 }
 
+/** Physical adapters on private LAN ranges (Wi-Fi / Ethernet). */
+function listPhysicalLanAddresses() {
+  const physical = listLanCandidates().filter((c) => !c.virtual);
+  const lan = physical.filter((c) => c.privateRange);
+  return lan.length > 0 ? lan : physical;
+}
+
 function getLanIpv4() {
   const candidates = listLanCandidates();
   const real = candidates.find((c) => !c.virtual && c.privateRange);
@@ -117,13 +124,12 @@ function createLanServer({ app, vaultPaths, port = DEFAULT_PORT, onVaultWritten 
   }
 
   function status() {
-    const candidates = listLanCandidates();
     const ip = getLanIpv4();
-    const addresses = candidates.map((c) => ({
+    const addresses = listPhysicalLanAddresses().map((c) => ({
       label: c.name,
       address: `${c.address}:${port}`,
       ip: c.address,
-      virtual: c.virtual,
+      virtual: false,
       privateRange: c.privateRange,
     }));
     return {
@@ -234,31 +240,78 @@ function createLanServer({ app, vaultPaths, port = DEFAULT_PORT, onVaultWritten 
     res.end();
   }
 
-  function start() {
-    if (server) return status();
-    generatePairingCode();
-
-    server = http.createServer((req, res) => {
+  function createRequestHandler() {
+    return (req, res) => {
       void handleRequest(req, res).catch(() => {
         if (!res.headersSent) {
           res.writeHead(500);
           res.end();
         }
       });
-    });
+    };
+  }
 
-    server.listen(port, "0.0.0.0");
-    return status();
+  function start() {
+    if (server?.listening) return Promise.resolve(status());
+
+    return new Promise((resolve) => {
+      if (server) {
+        try {
+          server.close();
+        } catch {
+          /* ignore */
+        }
+        server = null;
+      }
+
+      generatePairingCode();
+      const s = http.createServer(createRequestHandler());
+
+      const fail = (err) => {
+        try {
+          s.close();
+        } catch {
+          /* ignore */
+        }
+        server = null;
+        pairingCode = null;
+        pairingExpires = 0;
+        const st = status();
+        st.running = false;
+        st.error =
+          err && err.code === "EADDRINUSE"
+            ? `Port ${port} is already in use. Click Stop LAN server, close other Password Manager windows, or restart the app.`
+            : err && err.message
+              ? err.message
+              : "Could not start LAN server.";
+        resolve(st);
+      };
+
+      s.once("error", fail);
+      s.listen(port, "0.0.0.0", () => {
+        s.removeListener("error", fail);
+        server = s;
+        resolve(status());
+      });
+    });
   }
 
   function stop() {
-    if (server) {
-      server.close();
+    return new Promise((resolve) => {
+      if (!server) {
+        pairingCode = null;
+        pairingExpires = 0;
+        resolve(status());
+        return;
+      }
+
+      const s = server;
       server = null;
-    }
-    pairingCode = null;
-    pairingExpires = 0;
-    return status();
+      pairingCode = null;
+      pairingExpires = 0;
+
+      s.close(() => resolve(status()));
+    });
   }
 
   function newPairingCode() {

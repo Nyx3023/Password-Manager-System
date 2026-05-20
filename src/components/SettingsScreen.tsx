@@ -1,4 +1,4 @@
-import { FormEvent, useEffect, useState, type ReactNode } from "react";
+﻿import { FormEvent, useEffect, useState, type ReactNode } from "react";
 import { autofillSupported, VaultAutofill } from "@/shared/vaultAutofill";
 import type { ImportMode, Person, PersonCategoryId } from "@/shared/types";
 import {
@@ -11,7 +11,7 @@ import { MpinConfirmFlow } from "./MpinConfirmFlow";
 import { PasswordRequirements } from "./PasswordRequirements";
 import { PeopleManager } from "./PeopleManager";
 import { validateMasterPassword } from "@/shared/passwordPolicy";
-import { fetchPcStatus, loadLanPrefs, saveLanPrefs } from "@/shared/lanSync";
+import { isLanPaired } from "@/shared/lanSync";
 import {
   DesktopLanPanel,
   type DesktopLanPanelProps,
@@ -24,7 +24,6 @@ type SettingsModal =
   | "backup"
   | "csv"
   | "autofill"
-  | "lan"
   | null;
 
 interface SettingsScreenProps {
@@ -73,6 +72,7 @@ interface SettingsScreenProps {
     pairingCode: string,
     force?: boolean,
   ) => Promise<{ ok: boolean; message: string }>;
+  onOpenLanSync?: () => void;
   desktopLan?: DesktopLanPanelProps;
 }
 
@@ -95,7 +95,7 @@ function SettingsRow({
           {hint && <span className="settings-row-hint">{hint}</span>}
         </span>
         <span className="settings-row-chevron" aria-hidden>
-          ›
+          â€º
         </span>
       </button>
     );
@@ -127,17 +127,6 @@ export function SettingsScreen(props: SettingsScreenProps) {
 
   const [importPw, setImportPw] = useState("");
   const [importMode, setImportMode] = useState<ImportMode>("merge");
-  const [lanHost, setLanHost] = useState("");
-  const [lanPort, setLanPort] = useState("9847");
-  const [lanCode, setLanCode] = useState("");
-  const [lanStatus, setLanStatus] = useState<string>("");
-
-  useEffect(() => {
-    const prefs = loadLanPrefs();
-    setLanHost(prefs.host);
-    setLanPort(String(prefs.port));
-    setLanCode(prefs.code);
-  }, []);
 
   const closeModal = () => {
     setModal(null);
@@ -145,11 +134,6 @@ export function SettingsScreen(props: SettingsScreenProps) {
     setNewPw("");
     setConfirmPw("");
     setImportPw("");
-  };
-
-  const persistLanPrefs = () => {
-    const port = Number(lanPort) || 9847;
-    saveLanPrefs(lanHost, port, lanCode);
   };
 
   const newPwValid = validateMasterPassword(newPw).valid;
@@ -203,39 +187,6 @@ export function SettingsScreen(props: SettingsScreenProps) {
     if (done) props.onMessage("App reset. First-time setup will start.");
   };
 
-  const handleLanStatus = async () => {
-    try {
-      persistLanPrefs();
-      const st = await fetchPcStatus(lanHost, Number(lanPort) || 9847);
-      setLanStatus(st.running ? `PC online at ${st.address}` : "PC LAN server is off.");
-    } catch (e) {
-      setLanStatus(e instanceof Error ? e.message : "Status check failed.");
-    }
-  };
-
-  const handlePull = async () => {
-    if (!props.onPullFromPc) return;
-    persistLanPrefs();
-    const result = await props.onPullFromPc(
-      lanHost,
-      Number(lanPort) || 9847,
-      lanCode,
-    );
-    props.onMessage(result.message);
-  };
-
-  const handlePush = async (force = false) => {
-    if (!props.onPushToPc) return;
-    persistLanPrefs();
-    const result = await props.onPushToPc(
-      lanHost,
-      Number(lanPort) || 9847,
-      lanCode,
-      force,
-    );
-    props.onMessage(result.message);
-  };
-
   const showPhoneLanSync =
     props.onPullFromPc && props.onPushToPc && !props.desktopLan;
 
@@ -272,8 +223,12 @@ export function SettingsScreen(props: SettingsScreenProps) {
         {showPhoneLanSync && (
           <SettingsRow
             label="Sync with PC"
-            hint="Pull or push over local Wi-Fi"
-            onClick={() => setModal("lan")}
+            hint={
+              isLanPaired()
+                ? "Saved PC - opens with auto check"
+                : "Pull or push over local Wi-Fi"
+            }
+            onClick={() => props.onOpenLanSync?.()}
           />
         )}
       </section>
@@ -285,7 +240,7 @@ export function SettingsScreen(props: SettingsScreenProps) {
             hint={
               autofillEnabled
                 ? "Set up Chrome if Google still appears"
-                : "Required — then configure Chrome"
+                : "Required â€” then configure Chrome"
             }
             onClick={() => setModal("autofill")}
           />
@@ -337,39 +292,16 @@ export function SettingsScreen(props: SettingsScreenProps) {
 
       <Modal title="Autofill setup" open={modal === "autofill"} onClose={closeModal}>
         <div className="stack autofill-setup">
-          <p className="setup-sub">
-            Chrome uses <strong>Google Password Manager</strong> by default. You
-            must change <strong>two</strong> settings so Password Manager can
-            fill logins in Chrome.
-          </p>
-
-          <ol className="autofill-steps">
-            <li>
-              <strong>Android system</strong> — set Password Manager as the
-              default autofill service.
-            </li>
-            <li>
-              <strong>Chrome</strong> — open Chrome → <strong>Settings</strong>{" "}
-              → <strong>Autofill services</strong> (or{" "}
-              <strong>Passwords and autofill</strong>) → choose{" "}
-              <strong>Autofill using another service</strong> (wording may vary).
-            </li>
-            <li>
-              Restart Chrome, unlock your vault in this app, then tap a login
-              field on a website.
-            </li>
-          </ol>
-
           <p className="muted small">
-            If you do not see that Chrome option, update Chrome from the Play
-            Store (Chrome 131+). Older versions only support Google autofill in
-            the browser.
+            1. Set Password Manager as the Android autofill service (button
+            below).
           </p>
-
           <p className="muted small">
-            Optional: in Chrome&apos;s address bar, open{" "}
-            <code>chrome://flags/#enable-autofill-virtual-view-structure</code>{" "}
-            and enable it, then restart Chrome.
+            2. In Chrome: Settings - Autofill - choose &quot;Autofill using
+            another service&quot; (Chrome 131+).
+          </p>
+          <p className="muted small">
+            3. Unlock your vault here, then tap a login field on a site.
           </p>
 
           <button
@@ -519,66 +451,6 @@ export function SettingsScreen(props: SettingsScreenProps) {
         />
       </Modal>
 
-      <Modal title="Sync with PC" open={modal === "lan"} onClose={closeModal}>
-        <div className="stack">
-          <label>
-            PC host or IP
-            <input
-              type="text"
-              value={lanHost}
-              onChange={(e) => setLanHost(e.target.value)}
-              placeholder="192.168.1.42"
-            />
-          </label>
-          <label>
-            Port
-            <input
-              type="number"
-              value={lanPort}
-              onChange={(e) => setLanPort(e.target.value)}
-              placeholder="9847"
-            />
-          </label>
-          <label>
-            Pairing code
-            <input
-              type="text"
-              inputMode="numeric"
-              value={lanCode}
-              onChange={(e) => setLanCode(e.target.value)}
-              placeholder="6-digit code from PC"
-            />
-          </label>
-          {lanStatus && <p className="muted small">{lanStatus}</p>}
-          <button type="button" className="ghost block" onClick={() => void handleLanStatus()}>
-            Check status
-          </button>
-          <button
-            type="button"
-            className="primary block"
-            disabled={props.busy}
-            onClick={() => void handlePull()}
-          >
-            Pull from PC
-          </button>
-          <button
-            type="button"
-            className="ghost block"
-            disabled={props.busy}
-            onClick={() => void handlePush(false)}
-          >
-            Push to PC
-          </button>
-          <button
-            type="button"
-            className="ghost block"
-            disabled={props.busy}
-            onClick={() => void handlePush(true)}
-          >
-            Force push to PC
-          </button>
-        </div>
-      </Modal>
     </div>
   );
 }
