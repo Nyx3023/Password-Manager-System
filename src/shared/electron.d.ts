@@ -11,7 +11,7 @@ export interface TrayStatus {
   port: number;
   address: string;
   addresses?: LanAddressCandidate[];
-  pairingCode: string | null;
+  vaultEtag?: string | null;
   lastSyncAt: string | null;
   error?: string | null;
 }
@@ -26,7 +26,6 @@ export interface ElectronAPI {
   getTrayStatus: () => Promise<TrayStatus>;
   startLanServer: () => Promise<TrayStatus>;
   stopLanServer: () => Promise<TrayStatus>;
-  newLanPairingCode: () => Promise<TrayStatus>;
   openSettings: () => void;
   onLockRequested: (handler: () => void) => () => void;
   onLanVaultUpdated: (handler: () => void) => () => void;

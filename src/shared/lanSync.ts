@@ -2,14 +2,15 @@ import { lanHttpAvailable, lanHttpRequest } from "./vaultLanHttp";
 
 const PREFS_HOST = "lan_sync_host";
 const PREFS_PORT = "lan_sync_port";
-const PREFS_CODE = "lan_sync_code";
 const PREFS_PAIRED = "lan_sync_paired";
+const PREFS_VAULT_ETAG = "lan_sync_vault_etag";
+const PREFS_LAST_SYNC = "lan_sync_last_at";
 
 export interface LanServerStatus {
   running: boolean;
   port: number;
   address: string;
-  pairingCode: string | null;
+  vaultEtag?: string | null;
   lastSyncAt: string | null;
 }
 
@@ -17,6 +18,12 @@ export interface LanSyncResult {
   ok: boolean;
   message: string;
   etag?: string;
+}
+
+export interface PcConnection {
+  host: string;
+  port: number;
+  status: LanServerStatus;
 }
 
 /** Split host field; strips protocol, path, and optional :port. */
@@ -45,7 +52,6 @@ export function parseLanEndpoint(
 export function validateLanEndpoint(
   host: string,
   port: number,
-  pairingCode?: string,
 ): string | null {
   if (!host.trim()) {
     return "Enter the PC IP address (example: 192.168.1.42).";
@@ -56,9 +62,6 @@ export function validateLanEndpoint(
   if (port < 1 || port > 65535) {
     return "Port must be between 1 and 65535.";
   }
-  if (pairingCode !== undefined && !pairingCode.trim()) {
-    return "Enter the 6-digit pairing code from the PC.";
-  }
   return null;
 }
 
@@ -66,29 +69,20 @@ function baseUrl(host: string, port: number): string {
   return `http://${host.trim()}:${port}`;
 }
 
-function authHeaders(pairingCode: string): Record<string, string> {
-  return {
-    "X-Sync-Token": pairingCode.trim(),
-    Authorization: `Bearer ${pairingCode.trim()}`,
-  };
-}
-
-export function loadLanPrefs(): { host: string; port: number; code: string } {
+export function loadLanPrefs(): { host: string; port: number } {
   return {
     host: localStorage.getItem(PREFS_HOST) ?? "",
     port: Number(localStorage.getItem(PREFS_PORT) ?? "9847") || 9847,
-    code: localStorage.getItem(PREFS_CODE) ?? "",
   };
 }
 
-export function saveLanPrefs(host: string, port: number, code: string): void {
+export function saveLanPrefs(host: string, port: number): void {
   localStorage.setItem(PREFS_HOST, host.trim());
   localStorage.setItem(PREFS_PORT, String(port));
-  localStorage.setItem(PREFS_CODE, code.trim());
 }
 
-export function markLanPaired(host: string, port: number, code: string): void {
-  saveLanPrefs(host, port, code);
+export function markLanPaired(host: string, port: number): void {
+  saveLanPrefs(host, port);
   localStorage.setItem(PREFS_PAIRED, "1");
 }
 
@@ -104,11 +98,32 @@ export function isLanPaired(): boolean {
 let lastEtag: string | null = null;
 
 export function getLastSyncEtag(): string | null {
-  return lastEtag;
+  return lastEtag ?? loadStoredVaultEtag();
+}
+
+export function loadStoredVaultEtag(): string | null {
+  return localStorage.getItem(PREFS_VAULT_ETAG);
+}
+
+export function storeVaultEtag(etag: string | null | undefined): void {
+  if (!etag) return;
+  lastEtag = etag;
+  localStorage.setItem(PREFS_VAULT_ETAG, etag);
 }
 
 export function clearLastSyncEtag(): void {
   lastEtag = null;
+  localStorage.removeItem(PREFS_VAULT_ETAG);
+}
+
+export function loadLastSyncAt(): string | null {
+  return localStorage.getItem(PREFS_LAST_SYNC);
+}
+
+export function storeLastSyncAt(iso?: string): string {
+  const value = iso ?? new Date().toISOString();
+  localStorage.setItem(PREFS_LAST_SYNC, value);
+  return value;
 }
 
 export async function fetchPcStatus(
@@ -130,6 +145,29 @@ export async function fetchPcStatus(
   return JSON.parse(res.data) as LanServerStatus;
 }
 
+function isPcLanServerReady(st: LanServerStatus): boolean {
+  if (st.running === true) return true;
+  // A 200 from /api/status on our desktop host always includes address (ip:port).
+  return typeof st.address === "string" && st.address.includes(":");
+}
+
+export async function connectToPc(
+  host: string,
+  port: number,
+): Promise<PcConnection> {
+  const st = await fetchPcStatus(host, port);
+  if (!isPcLanServerReady(st)) {
+    throw new Error(
+      "PC LAN server is off. On the desktop app open Settings and tap Start LAN server.",
+    );
+  }
+  return {
+    host: host.trim(),
+    port,
+    status: { ...st, running: true },
+  };
+}
+
 function parseError(data: string): string | null {
   try {
     const obj = JSON.parse(data) as { error?: string };
@@ -142,17 +180,12 @@ function parseError(data: string): string | null {
 export async function pullVaultFromPc(options: {
   host: string;
   port: number;
-  pairingCode: string;
 }): Promise<{ content: string; etag: string | null }> {
   if (!lanHttpAvailable()) {
     throw new Error("LAN sync requires the Android app.");
   }
 
-  const validation = validateLanEndpoint(
-    options.host,
-    options.port,
-    options.pairingCode,
-  );
+  const validation = validateLanEndpoint(options.host, options.port);
   if (validation) {
     throw new Error(validation);
   }
@@ -160,12 +193,8 @@ export async function pullVaultFromPc(options: {
   const res = await lanHttpRequest({
     url: `${baseUrl(options.host, options.port)}/api/vault`,
     method: "GET",
-    headers: authHeaders(options.pairingCode),
   });
 
-  if (res.status === 401) {
-    throw new Error(parseError(res.data) || "Invalid pairing code.");
-  }
   if (res.status === 404) {
     throw new Error(
       "No vault on the PC yet. Push from the phone first or create a vault on the PC.",
@@ -176,14 +205,13 @@ export async function pullVaultFromPc(options: {
   }
 
   const etag = res.headers.etag ?? res.headers["etag"] ?? null;
-  lastEtag = etag;
+  storeVaultEtag(etag);
   return { content: res.data, etag };
 }
 
 export async function pushVaultToPc(options: {
   host: string;
   port: number;
-  pairingCode: string;
   vaultJson: string;
   force?: boolean;
 }): Promise<LanSyncResult> {
@@ -191,17 +219,12 @@ export async function pushVaultToPc(options: {
     return { ok: false, message: "LAN sync requires the Android app." };
   }
 
-  const validation = validateLanEndpoint(
-    options.host,
-    options.port,
-    options.pairingCode,
-  );
+  const validation = validateLanEndpoint(options.host, options.port);
   if (validation) {
     return { ok: false, message: validation };
   }
 
   const headers: Record<string, string> = {
-    ...authHeaders(options.pairingCode),
     "Content-Type": "application/json",
   };
   if (!options.force && lastEtag) {
@@ -215,9 +238,6 @@ export async function pushVaultToPc(options: {
     body: options.vaultJson,
   });
 
-  if (res.status === 401) {
-    return { ok: false, message: parseError(res.data) || "Invalid pairing code." };
-  }
   if (res.status === 409) {
     return {
       ok: false,
@@ -235,10 +255,10 @@ export async function pushVaultToPc(options: {
 
   try {
     const body = JSON.parse(res.data) as { etag?: string };
-    if (body.etag) lastEtag = body.etag;
+    storeVaultEtag(body.etag);
   } catch {
     /* ignore */
   }
 
-  return { ok: true, message: "Vault sent to PC." };
+  return { ok: true, message: "Vault merged on PC." };
 }

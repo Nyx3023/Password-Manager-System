@@ -1,8 +1,10 @@
-import { useCallback, useEffect, useMemo, useState } from "react";
+import { useCallback, useEffect, useMemo, useRef, useState } from "react";
 import type { TrayStatus } from "@/shared/electron.d";
+import { formatLastSync } from "@/shared/syncTime";
 import { SetupWizard } from "@/components/setup/SetupWizard";
 import { UnlockScreen } from "@/components/UnlockScreen";
 import { SettingsScreen } from "@/components/SettingsScreen";
+import { SyncIcon, type SyncIconState } from "@/components/SyncIcon";
 import { useAutoLock } from "@/hooks/useAutoLock";
 import { useClipboard } from "@/hooks/useClipboard";
 import { useVault } from "@/hooks/useVault";
@@ -20,6 +22,9 @@ export default function AppDesktop() {
   const [nav, setNav] = useState<Nav>("vault");
   const [adding, setAdding] = useState(false);
   const [lanStatus, setLanStatus] = useState<TrayStatus | null>(null);
+  const [syncVisual, setSyncVisual] = useState<SyncIconState>("idle");
+  const syncVisualTimer = useRef<ReturnType<typeof setTimeout> | null>(null);
+  const lanAutoStarted = useRef(false);
 
   useEffect(() => {
     void vault.init();
@@ -32,6 +37,20 @@ export default function AppDesktop() {
     return unsub;
   }, [vault.lock]);
 
+  const pulseSyncVisual = useCallback(
+    (state: SyncIconState, revertMs?: number) => {
+      setSyncVisual(state);
+      if (syncVisualTimer.current) clearTimeout(syncVisualTimer.current);
+      if (revertMs !== undefined && state !== "idle") {
+        syncVisualTimer.current = setTimeout(() => {
+          setSyncVisual("idle");
+          syncVisualTimer.current = null;
+        }, revertMs);
+      }
+    },
+    [],
+  );
+
   const refreshLanStatus = useCallback(async () => {
     if (!window.electronAPI) return;
     const st = await window.electronAPI.getTrayStatus();
@@ -43,17 +62,50 @@ export default function AppDesktop() {
     window.setTimeout(() => setToast(null), 3000);
   }, []);
 
+  const startLan = useCallback(async () => {
+    if (!window.electronAPI) return;
+    const st = await window.electronAPI.startLanServer();
+    setLanStatus(st);
+    if (st.error) {
+      showToast(st.error);
+    }
+    return st;
+  }, [showToast]);
+
+  useEffect(() => {
+    if (!window.electronAPI || lanAutoStarted.current) return;
+    lanAutoStarted.current = true;
+    void (async () => {
+      const st = await window.electronAPI!.getTrayStatus();
+      if (!st.running) {
+        await startLan();
+      } else {
+        setLanStatus(st);
+      }
+    })();
+  }, [startLan]);
+
   useEffect(() => {
     if (!window.electronAPI) return;
     return window.electronAPI.onLanVaultUpdated(() => {
       void refreshLanStatus();
-      if (vault.unlocked) {
-        void vault.reloadFromDiskAfterSync().then((ok) => {
-          if (ok) showToast("Vault updated from phone.");
-        });
-      }
+      if (!vault.unlocked) return;
+
+      pulseSyncVisual("syncing");
+      void vault.reloadFromDiskAfterSync().then((ok) => {
+        if (ok) {
+          pulseSyncVisual("success", 2000);
+        } else {
+          pulseSyncVisual("error", 3000);
+        }
+      });
     });
-  }, [vault.reloadFromDiskAfterSync, vault.unlocked, refreshLanStatus, showToast]);
+  }, [
+    vault.reloadFromDiskAfterSync,
+    vault.unlocked,
+    refreshLanStatus,
+    pulseSyncVisual,
+  ]);
 
   useEffect(() => {
     const onSettings = () => setNav("settings");
@@ -76,29 +128,11 @@ export default function AppDesktop() {
     [copy, showToast],
   );
 
-  const startLan = useCallback(async () => {
-    if (!window.electronAPI) return;
-    const st = await window.electronAPI.startLanServer();
-    setLanStatus(st);
-    if (st.error) {
-      showToast(st.error);
-      return;
-    }
-    showToast(st.running ? `LAN server on ${st.address}` : "Could not start LAN server.");
-  }, [showToast]);
-
   const stopLan = useCallback(async () => {
     if (!window.electronAPI) return;
     const st = await window.electronAPI.stopLanServer();
     setLanStatus(st);
     showToast("LAN server stopped");
-  }, [showToast]);
-
-  const newLanPairingCode = useCallback(async () => {
-    if (!window.electronAPI) return;
-    const st = await window.electronAPI.newLanPairingCode();
-    setLanStatus(st);
-    showToast(st.pairingCode ? "New pairing code ready." : "Start the LAN server first.");
   }, [showToast]);
 
   const desktopLan = useMemo(() => {
@@ -107,33 +141,13 @@ export default function AppDesktop() {
       status: lanStatus,
       busy: vault.busy,
       onRefresh: refreshLanStatus,
-      onStart: startLan,
       onStop: stopLan,
-      onNewPairingCode: newLanPairingCode,
       onCopyAddress: (address: string) => {
         void copy(address);
         showToast("Address copied.");
       },
-      onCopyPairingCode: (code: string) => {
-        void copy(code);
-        showToast("Pairing code copied.");
-      },
-      onReloadVault: async () => {
-        const ok = await vault.reloadFromDiskAfterSync();
-        showToast(ok ? "Vault reloaded." : "Reload failed.");
-      },
     };
-  }, [
-    lanStatus,
-    vault.busy,
-    refreshLanStatus,
-    startLan,
-    stopLan,
-    newLanPairingCode,
-    copy,
-    showToast,
-    vault.reloadFromDiskAfterSync,
-  ]);
+  }, [lanStatus, vault.busy, refreshLanStatus, stopLan, copy, showToast]);
 
   if (!vault.ready) {
     return (
@@ -178,6 +192,10 @@ export default function AppDesktop() {
     );
   }
 
+  const lanRunning = lanStatus?.running ?? false;
+  const iconState: SyncIconState =
+    syncVisual === "idle" && lanRunning ? "idle" : syncVisual;
+
   return (
     <div className="desktop-shell">
       <aside className="desktop-sidebar">
@@ -210,19 +228,42 @@ export default function AppDesktop() {
         >
           <p className="label-mono">LAN SYNC</p>
           <p className="muted small">
-            {lanStatus?.running ? lanStatus.address : "Server off"}
+            {lanRunning ? lanStatus?.address : "Starting..."}
           </p>
-          {lanStatus?.pairingCode && (
-            <p className="small">Code: {lanStatus.pairingCode}</p>
-          )}
-          <p className="muted small desktop-sidebar-lan-hint">Open settings</p>
+          <p className="muted small desktop-sidebar-lan-hint">
+            Last sync {formatLastSync(lanStatus?.lastSyncAt ?? null)}
+          </p>
         </button>
       </aside>
 
       <div className="desktop-main">
         <header className="desktop-topbar">
-          <h1>{nav === "vault" ? "Vault" : "Settings"}</h1>
+          <div className="desktop-topbar-title">
+            <h1>{nav === "vault" ? "Vault" : "Settings"}</h1>
+            {lanRunning && (
+              <p className="muted small desktop-topbar-sync-meta">
+                LAN on | Last sync {formatLastSync(lanStatus?.lastSyncAt ?? null)}
+              </p>
+            )}
+          </div>
           <div className="desktop-topbar-actions">
+            <button
+              type="button"
+              className={`topbar-icon-btn topbar-sync-btn desktop-topbar-sync-btn${
+                syncVisual === "success"
+                  ? " topbar-sync-btn--success"
+                  : syncVisual === "error"
+                    ? " topbar-sync-btn--error"
+                    : ""
+              }`}
+              aria-label={
+                syncVisual === "syncing" ? "Syncing with phone" : "LAN sync status"
+              }
+              disabled={syncVisual === "syncing"}
+              onClick={() => setNav("settings")}
+            >
+              <SyncIcon state={iconState} />
+            </button>
             {nav === "vault" && (
               <button
                 type="button"

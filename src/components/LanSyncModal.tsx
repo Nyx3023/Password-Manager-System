@@ -1,13 +1,14 @@
-import { useCallback, useEffect, useRef, useState } from "react";
+﻿import { useCallback, useEffect, useRef, useState } from "react";
 import {
-  fetchPcStatus,
+  connectToPc,
   isLanPaired,
   loadLanPrefs,
   markLanPaired,
   parseLanEndpoint,
-  saveLanPrefs,
+  type PcConnection,
   validateLanEndpoint,
 } from "@/shared/lanSync";
+import { startPcDiscovery } from "@/shared/vaultLanHttp";
 import { LoadingIndicator } from "./LoadingIndicator";
 import { Modal } from "./Modal";
 import type { SyncIconState } from "./SyncIcon";
@@ -17,42 +18,30 @@ interface LanSyncModalProps {
   busy: boolean;
   onClose: () => void;
   onSyncVisual?: (state: SyncIconState) => void;
-  onPull: (
-    host: string,
-    port: number,
-    code: string,
-  ) => Promise<{ ok: boolean; message: string }>;
+  onPull: (host: string, port: number) => Promise<{ ok: boolean; message: string }>;
   onPush: (
     host: string,
     port: number,
-    code: string,
     force?: boolean,
   ) => Promise<{ ok: boolean; message: string }>;
   onMessage: (message: string) => void;
 }
 
-function readPrefsFields() {
-  const prefs = loadLanPrefs();
-  return {
-    host: prefs.host,
-    port: String(prefs.port),
-    code: prefs.code,
-  };
-}
-
 export function LanSyncModal(props: LanSyncModalProps) {
-  const initial = readPrefsFields();
-  const [lanHost, setLanHost] = useState(initial.host);
-  const [lanPort, setLanPort] = useState(initial.port);
-  const [lanCode, setLanCode] = useState(initial.code);
+  const [connection, setConnection] = useState<PcConnection | null>(null);
+  const [discoveredPc, setDiscoveredPc] = useState<{ ip: string; port: number } | null>(
+    null,
+  );
+  const [manualOpen, setManualOpen] = useState(false);
+  const [manualHost, setManualHost] = useState("");
+  const [manualPort, setManualPort] = useState("9847");
+  const [scanning, setScanning] = useState(false);
   const [statusText, setStatusText] = useState<string | null>(null);
-  const [statusOk, setStatusOk] = useState(false);
   const [error, setError] = useState<string | null>(null);
-  const [phase, setPhase] = useState<"idle" | "status" | "pull" | "push">("idle");
+  const [phase, setPhase] = useState<"idle" | "connect" | "pull" | "push">("idle");
   const [progressLabel, setProgressLabel] = useState("");
-  const [paired, setPaired] = useState(() => isLanPaired());
-  const autoChecked = useRef(false);
   const visualTimer = useRef<ReturnType<typeof setTimeout> | null>(null);
+  const connectAttempted = useRef(false);
 
   const setVisual = useCallback(
     (state: SyncIconState, revertMs?: number) => {
@@ -71,89 +60,90 @@ export function LanSyncModal(props: LanSyncModalProps) {
     [props.onSyncVisual],
   );
 
-  const getEndpoint = useCallback(() => {
-    const host = lanHost.trim() || loadLanPrefs().host;
-    const port = lanPort.trim() || String(loadLanPrefs().port);
-    return parseLanEndpoint(host, port);
-  }, [lanHost, lanPort]);
+  const applyConnection = useCallback((conn: PcConnection) => {
+    setConnection(conn);
+    markLanPaired(conn.host, conn.port);
+    setScanning(false);
+    setStatusText(`Connected to ${conn.status.address}`);
+    setError(null);
+  }, []);
 
-  const persistFields = useCallback(
-    (host: string, port: number, code: string) => {
-      setLanHost(host);
-      setLanPort(String(port));
-      setLanCode(code);
-      saveLanPrefs(host, port, code);
-    },
-    [],
-  );
-
-  const runStatusCheck = useCallback(
-    async (endpoint?: { host: string; port: number }) => {
-      const ep = endpoint ?? getEndpoint();
-      const validation = validateLanEndpoint(ep.host, ep.port);
+  const runConnect = useCallback(
+    async (host: string, port: number) => {
+      const validation = validateLanEndpoint(host, port);
       if (validation) {
         setError(validation);
-        setStatusText(null);
-        setStatusOk(false);
         setVisual("error", 3500);
         return;
       }
 
       setError(null);
-      setPhase("status");
+      setPhase("connect");
       setVisual("syncing");
-      setProgressLabel("Checking PC...");
+      setProgressLabel("Connecting to PC...");
 
-      let failed = false;
       try {
-        const st = await fetchPcStatus(ep.host, ep.port);
-        const online = st.running;
-        setStatusOk(online);
-        setStatusText(
-          online ? `PC online at ${st.address}` : "PC LAN server is off on that address.",
-        );
-        if (online) {
-          const prefs = loadLanPrefs();
-          persistFields(ep.host, ep.port, lanCode.trim() || prefs.code);
-        }
+        const conn = await connectToPc(host, port);
+        applyConnection(conn);
+        setVisual("idle");
       } catch (e) {
-        failed = true;
         const msg =
-          e instanceof Error ? formatLanError(e.message) : "Status check failed.";
+          e instanceof Error ? formatLanError(e.message) : "Could not connect.";
         setError(msg);
         setStatusText(null);
-        setStatusOk(false);
+        setConnection(null);
         setVisual("error", 3500);
       } finally {
         setPhase("idle");
         setProgressLabel("");
-        if (!failed) setVisual("idle");
       }
     },
-    [getEndpoint, lanCode, persistFields, setVisual],
+    [applyConnection, setVisual],
   );
 
   useEffect(() => {
     if (!props.open) {
-      autoChecked.current = false;
+      connectAttempted.current = false;
+      setScanning(false);
+      setDiscoveredPc(null);
+      setManualOpen(false);
       return;
     }
 
-    const prefs = readPrefsFields();
-    setLanHost(prefs.host);
-    setLanPort(prefs.port);
-    setLanCode(prefs.code);
-    setPaired(isLanPaired());
+    setConnection(null);
     setError(null);
     setStatusText(null);
-    setStatusOk(false);
+    setScanning(true);
+    connectAttempted.current = false;
 
-    if (autoChecked.current || !prefs.host.trim()) return;
-    autoChecked.current = true;
+    const prefs = loadLanPrefs();
+    setManualHost(prefs.host);
+    setManualPort(String(prefs.port));
 
-    const ep = parseLanEndpoint(prefs.host, prefs.port);
-    void runStatusCheck(ep);
-  }, [props.open, runStatusCheck]);
+    let cleanupFn: (() => void) | null = null;
+    void startPcDiscovery((ip, port) => {
+      setDiscoveredPc({ ip, port });
+    }).then((cleanup) => {
+      cleanupFn = cleanup;
+    });
+
+    if (prefs.host && isLanPaired()) {
+      connectAttempted.current = true;
+      void runConnect(prefs.host, prefs.port);
+    }
+
+    return () => {
+      if (cleanupFn) cleanupFn();
+    };
+  }, [props.open, runConnect]);
+
+  useEffect(() => {
+    if (!props.open || !discoveredPc || connection || connectAttempted.current) {
+      return;
+    }
+    connectAttempted.current = true;
+    void runConnect(discoveredPc.ip, discoveredPc.port);
+  }, [props.open, discoveredPc, connection, runConnect]);
 
   useEffect(() => {
     return () => {
@@ -163,28 +153,29 @@ export function LanSyncModal(props: LanSyncModalProps) {
 
   const busy = phase !== "idle" || props.busy;
   const inputLocked = phase !== "idle";
+  const ep = connection
+    ? { host: connection.host, port: connection.port }
+    : null;
+
+  const handleManualConnect = () => {
+    const { host, port } = parseLanEndpoint(manualHost, manualPort);
+    void runConnect(host, port);
+  };
 
   const handlePull = async () => {
-    const ep = getEndpoint();
-    const code = lanCode.trim() || loadLanPrefs().code;
-    const validation = validateLanEndpoint(ep.host, ep.port, code);
-    if (validation) {
-      setError(validation);
-      setVisual("error", 3500);
+    if (!ep) {
+      setError("Connect to a PC first.");
       return;
     }
 
     setError(null);
     setPhase("pull");
     setVisual("syncing");
-    setProgressLabel("Downloading vault from PC...");
+    setProgressLabel("Merging vault from PC...");
 
     try {
-      persistFields(ep.host, ep.port, code);
-      const result = await props.onPull(ep.host, ep.port, code);
+      const result = await props.onPull(ep.host, ep.port);
       if (result.ok) {
-        markLanPaired(ep.host, ep.port, code);
-        setPaired(true);
         setVisual("success", 2500);
         props.onClose();
         props.onMessage(result.message);
@@ -202,26 +193,21 @@ export function LanSyncModal(props: LanSyncModalProps) {
   };
 
   const handlePush = async (force = false) => {
-    const ep = getEndpoint();
-    const code = lanCode.trim() || loadLanPrefs().code;
-    const validation = validateLanEndpoint(ep.host, ep.port, code);
-    if (validation) {
-      setError(validation);
-      setVisual("error", 3500);
+    if (!ep) {
+      setError("Connect to a PC first.");
       return;
     }
 
     setError(null);
     setPhase("push");
     setVisual("syncing");
-    setProgressLabel(force ? "Force pushing to PC..." : "Uploading vault to PC...");
+    setProgressLabel(
+      force ? "Replacing PC vault..." : "Merging with PC, then uploading...",
+    );
 
     try {
-      persistFields(ep.host, ep.port, code);
-      const result = await props.onPush(ep.host, ep.port, code, force);
+      const result = await props.onPush(ep.host, ep.port, force);
       if (result.ok) {
-        markLanPaired(ep.host, ep.port, code);
-        setPaired(true);
         setVisual("success", 2500);
         props.onClose();
         props.onMessage(result.message);
@@ -246,62 +232,107 @@ export function LanSyncModal(props: LanSyncModalProps) {
       compact
     >
       <div className="lan-sync-panel lan-sync-panel--compact">
-        {paired && statusOk && (
-          <p className="lan-sync-paired-inline">Saved PC connection</p>
-        )}
-
         <p className="muted small lan-sync-hint lan-sync-hint--compact">
-          Same Wi-Fi. PC IP from desktop Settings. Code refreshes every 10 min.
+          Same Wi-Fi as the PC. We scan for your desktop automatically.
         </p>
 
-        <div className="lan-sync-fields lan-sync-fields--compact">
-          <label>
-            PC IP
-            <input
-              type="text"
-              inputMode="decimal"
-              value={lanHost}
-              onChange={(e) => setLanHost(e.target.value)}
-              placeholder="192.168.1.42"
-              disabled={inputLocked}
-              readOnly={false}
-              autoComplete="off"
-              autoCapitalize="off"
-              autoCorrect="off"
-              spellCheck={false}
-              onPointerDown={(e) => e.stopPropagation()}
-            />
-          </label>
-          <div className="lan-sync-row-2">
-            <label>
-              Port
-              <input
-                type="text"
-                inputMode="numeric"
-                pattern="[0-9]*"
-                value={lanPort}
-                onChange={(e) => setLanPort(e.target.value)}
-                placeholder="9847"
-                disabled={inputLocked}
-                autoComplete="off"
-                onPointerDown={(e) => e.stopPropagation()}
-              />
-            </label>
-            <label>
-              Code
-              <input
-                type="text"
-                inputMode="numeric"
-                value={lanCode}
-                onChange={(e) => setLanCode(e.target.value)}
-                placeholder="6 digits"
-                disabled={inputLocked}
-                autoComplete="off"
-                onPointerDown={(e) => e.stopPropagation()}
-              />
-            </label>
+        {scanning && !connection && phase === "idle" && (
+          <div className="lan-sync-scan">
+            <LoadingIndicator variant="compact" label="Scanning for PC..." />
           </div>
-        </div>
+        )}
+
+        {discoveredPc && !connection && phase !== "connect" && (
+          <button
+            type="button"
+            className="lan-sync-detected ghost block"
+            disabled={busy}
+            onClick={() => void runConnect(discoveredPc.ip, discoveredPc.port)}
+          >
+            <span className="label-mono">PC DETECTED</span>
+            <span>
+              {discoveredPc.ip}:{discoveredPc.port}
+            </span>
+          </button>
+        )}
+
+        {statusText && !busy && (
+          <p className="lan-sync-status-box small lan-sync-status-box--compact lan-sync-ok-box">
+            {statusText}
+          </p>
+        )}
+
+        {error && !busy && (
+          <p className="error lan-sync-status-box lan-sync-status-box--compact">
+            {error}
+          </p>
+        )}
+
+        {!manualOpen ? (
+          <button
+            type="button"
+            className="ghost block lan-sync-manual-toggle"
+            disabled={busy}
+            onClick={() => setManualOpen(true)}
+          >
+            Manual connect
+          </button>
+        ) : (
+          <div className="lan-sync-manual">
+            <div className="lan-sync-manual-head">
+              <span className="label-mono">MANUAL</span>
+              <button
+                type="button"
+                className="ghost small"
+                disabled={busy}
+                onClick={() => setManualOpen(false)}
+              >
+                Hide
+              </button>
+            </div>
+            <div className="lan-sync-row-2">
+              <label>
+                PC IP
+                <input
+                  className="lan-sync-manual-field"
+                  type="text"
+                  inputMode="decimal"
+                  value={manualHost}
+                  onChange={(e) => setManualHost(e.target.value)}
+                  placeholder="192.168.1.42"
+                  disabled={inputLocked}
+                  autoComplete="off"
+                  autoCapitalize="none"
+                  autoCorrect="off"
+                  spellCheck={false}
+                />
+              </label>
+              <label>
+                Port
+                <input
+                  className="lan-sync-manual-field"
+                  type="text"
+                  inputMode="numeric"
+                  value={manualPort}
+                  onChange={(e) => setManualPort(e.target.value)}
+                  placeholder="9847"
+                  disabled={inputLocked}
+                  autoComplete="off"
+                  autoCapitalize="none"
+                  autoCorrect="off"
+                />
+              </label>
+            </div>
+            <button
+              type="button"
+              className="ghost block"
+              disabled={busy}
+              onClick={handleManualConnect}
+            >
+              Connect
+            </button>
+          </div>
+        )}
 
         {busy && (
           <div className="lan-sync-progress">
@@ -315,56 +346,36 @@ export function LanSyncModal(props: LanSyncModalProps) {
           </div>
         )}
 
-        {statusText && !busy && (
-          <p
-            className={`lan-sync-status-box small lan-sync-status-box--compact${
-              statusOk ? " lan-sync-ok-box" : ""
-            }`}
-          >
-            {statusText}
-          </p>
-        )}
-
-        {error && !busy && (
-          <p className="error lan-sync-status-box lan-sync-status-box--compact">
-            {error}
-          </p>
-        )}
-
         <div className="lan-sync-actions lan-sync-actions--compact">
           <button
             type="button"
-            className="ghost block"
-            disabled={busy}
-            onClick={() => void runStatusCheck()}
-          >
-            Check status
-          </button>
-          <button
-            type="button"
             className="primary block"
-            disabled={busy}
+            disabled={busy || !connection}
             onClick={() => void handlePull()}
           >
-            Pull from PC
+            Merge from PC
           </button>
           <button
             type="button"
             className="ghost block"
-            disabled={busy}
+            disabled={busy || !connection}
             onClick={() => void handlePush(false)}
           >
-            Push to PC
+            Merge to PC
           </button>
           <button
             type="button"
             className="ghost block"
-            disabled={busy}
+            disabled={busy || !connection}
             onClick={() => void handlePush(true)}
           >
-            Force push
+            Force push (replaces PC)
           </button>
         </div>
+        <p className="muted small lan-sync-hint lan-sync-hint--compact">
+          Phone and PC must use the same master password (same .pms backup). Push
+          merges first; force push overwrites the PC vault.
+        </p>
       </div>
     </Modal>
   );
@@ -372,7 +383,7 @@ export function LanSyncModal(props: LanSyncModalProps) {
 
 function formatLanError(message: string): string {
   if (message.includes("Invalid host") || message.includes("http://:")) {
-    return "Enter a valid PC IP address (example: 192.168.1.42).";
+    return "Could not reach the PC. Try Manual connect with the desktop IP.";
   }
   return message;
 }

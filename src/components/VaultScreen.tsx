@@ -14,9 +14,11 @@ import { Modal } from "./Modal";
 import { EntryList } from "./EntryList";
 import { PersonAvatar } from "./ServiceIcon";
 import { LanSyncModal } from "./LanSyncModal";
+import { formatLastSync } from "@/shared/syncTime";
 import { SyncIcon, type SyncIconState } from "./SyncIcon";
 import { SettingsScreen } from "./SettingsScreen";
 import { AddEntryWizard } from "./wizard/AddEntryWizard";
+import type { DesktopLanPanelProps } from "@/desktop/DesktopLanPanel";
 
 type Tab = "vault" | "settings";
 
@@ -70,14 +72,16 @@ interface VaultScreenProps {
   onPullFromPc?: (
     host: string,
     port: number,
-    pairingCode: string,
   ) => Promise<{ ok: boolean; message: string }>;
   onPushToPc?: (
     host: string,
     port: number,
-    pairingCode: string,
     force?: boolean,
   ) => Promise<{ ok: boolean; message: string }>;
+  desktopLan?: DesktopLanPanelProps;
+  syncVisual?: SyncIconState;
+  lastSyncAt?: string | null;
+  onSyncVisual?: (state: SyncIconState, revertMs?: number) => void;
 }
 
 export function VaultScreen(props: VaultScreenProps) {
@@ -89,7 +93,9 @@ export function VaultScreen(props: VaultScreenProps) {
   const [adding, setAdding] = useState(false);
   const [editing, setEditing] = useState(false);
   const [lanSyncOpen, setLanSyncOpen] = useState(false);
-  const [syncVisual, setSyncVisual] = useState<SyncIconState>("idle");
+  const [modalSyncVisual, setModalSyncVisual] = useState<SyncIconState>("idle");
+  const syncVisual = props.syncVisual ?? modalSyncVisual;
+  const setSyncVisual = props.onSyncVisual ?? setModalSyncVisual;
 
   const showLanSync = Boolean(props.onPullFromPc && props.onPushToPc);
 
@@ -149,6 +155,9 @@ export function VaultScreen(props: VaultScreenProps) {
         </div>
         <p className="muted small topbar-meta">
           {props.entries.length} entries | {props.people.length} people
+          {showLanSync && props.lastSyncAt !== undefined && (
+            <> | Sync {formatLastSync(props.lastSyncAt)}</>
+          )}
         </p>
       </header>
 
@@ -176,7 +185,11 @@ export function VaultScreen(props: VaultScreenProps) {
             onImportChromeCsv={props.onImportChromeCsv}
             onMessage={props.onMessage}
             onResetApp={props.onResetApp}
-            onOpenLanSync={showLanSync ? () => setLanSyncOpen(true) : undefined}
+            onPullFromPc={props.onPullFromPc}
+            onPushToPc={props.onPushToPc}
+            onOpenLanSync={props.onPullFromPc ? () => setLanSyncOpen(true) : undefined}
+            lanLastSyncAt={props.lastSyncAt}
+            desktopLan={props.desktopLan}
           />
         ) : props.entries.length === 0 ? (
           <div className="vault-home-empty">

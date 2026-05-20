@@ -6,7 +6,8 @@ import { EntryForm } from "@/components/EntryForm";
 import { EntryList } from "@/components/EntryList";
 import { Modal } from "@/components/Modal";
 import { PersonAvatar } from "@/components/ServiceIcon";
-import { AddEntryWizard } from "@/components/wizard/AddEntryWizard";
+import { DesktopAddEntryForm } from "./DesktopAddEntryForm";
+import { DesktopDialog } from "./DesktopDialog";
 import { colorForId } from "@/shared/people";
 import type { Person, PersonCategoryId, VaultEntry } from "@/shared/types";
 
@@ -127,12 +128,12 @@ export function DesktopVaultView(props: DesktopVaultViewProps) {
         </div>
       </div>
 
-      <Modal
+      <DesktopDialog
         title="Add password"
         open={props.adding}
         onClose={() => props.onAddingChange(false)}
       >
-        <AddEntryWizard
+        <DesktopAddEntryForm
           people={props.people}
           onCancel={() => props.onAddingChange(false)}
           onAddPerson={props.onAddPerson}
@@ -142,12 +143,13 @@ export function DesktopVaultView(props: DesktopVaultViewProps) {
             props.onMessage("Saved.");
           }}
         />
-      </Modal>
+      </DesktopDialog>
 
       <Modal
         title="Edit password"
         open={editing && !!selected}
         onClose={() => setEditing(false)}
+        wide
       >
         {selected && (
           <EntryForm

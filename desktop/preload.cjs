@@ -14,7 +14,6 @@ contextBridge.exposeInMainWorld("electronAPI", {
   getTrayStatus: () => ipcRenderer.invoke("tray:status"),
   startLanServer: () => ipcRenderer.invoke("lan:start"),
   stopLanServer: () => ipcRenderer.invoke("lan:stop"),
-  newLanPairingCode: () => ipcRenderer.invoke("lan:newPairing"),
   openSettings: () => ipcRenderer.send("app:open-settings"),
   onLockRequested: (handler) => {
     const listener = () => handler();

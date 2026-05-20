@@ -225,6 +225,11 @@
   letter-spacing: 0.04em;
 }
 
+.desktop-lan-addr-hint {
+  margin: 0.35rem 0 0.5rem;
+  font-size: 0.75rem;
+}
+
 .desktop-lan-ip-label {
   grid-column: 1;
   font-size: 0.72rem;
@@ -329,9 +334,36 @@
   letter-spacing: 0.06em;
 }
 
-/* Hide mobile-only chrome in desktop settings */
+/* Desktop settings: full width, responsive 2-column grid */
 .desktop-content .settings {
-  max-width: 640px;
+  max-width: none;
+  width: 100%;
+}
+
+.desktop-topbar-title {
+  display: flex;
+  flex-direction: column;
+  gap: 0.2rem;
+  min-width: 0;
+}
+
+.desktop-topbar-sync-meta {
+  margin: 0;
+  letter-spacing: 0.04em;
+}
+
+.desktop-topbar-sync-btn {
+  flex-shrink: 0;
+}
+
+.desktop-topbar-sync-btn .sync-icon {
+  width: 22px;
+  height: 22px;
+}
+
+.desktop-topbar-sync-btn:disabled {
+  opacity: 1;
+  cursor: default;
 }
 
 @media (max-width: 900px) {
@@ -343,4 +375,192 @@
     border-right: none;
     padding-right: 0;
   }
+}
+
+/* Desktop dialog (add entry) - exactly one scrollbar */
+.desktop-dialog-backdrop {
+  position: fixed;
+  inset: 0;
+  z-index: 10000;
+  display: grid;
+  place-items: center;
+  padding: 1.5rem;
+  background: rgba(0, 0, 0, 0.82);
+  overflow: hidden;
+}
+
+.desktop-dialog {
+  width: min(620px, 100%);
+  max-height: calc(100vh - 3rem);
+  min-height: 100%;
+  display: flex;
+  flex-direction: column;
+  overflow: hidden;
+  border-radius: var(--radius);
+}
+
+.desktop-dialog__header {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 1rem;
+  flex-shrink: 0;
+  padding: 0.85rem 1.1rem;
+  border-bottom: 1px solid var(--border);
+  background: var(--panel);
+}
+
+.desktop-dialog__header h2 {
+  margin: 0;
+  font-size: 0.8rem;
+  font-weight: 400;
+  letter-spacing: 0.14em;
+  text-transform: uppercase;
+}
+
+.desktop-dialog__body {
+  flex: 1;
+  min-height: 0;
+  overflow: hidden;
+  display: flex;
+  flex-direction: column;
+  padding: 0;
+}
+
+/* Form fills dialog body; footer pinned, scroll region between header and footer */
+.desktop-add-entry {
+  --add-entry-footer-h: 58px;
+  position: relative;
+  flex: 1 1 auto;
+  min-height: 0;
+  width: 100%;
+  overflow: hidden;
+}
+
+.desktop-add-entry__scroll {
+  position: absolute;
+  top: 0;
+  left: 0;
+  right: 0;
+  bottom: var(--add-entry-footer-h);
+  overflow-x: hidden;
+  overflow-y: auto;
+  overscroll-behavior: contain;
+  -webkit-overflow-scrolling: touch;
+  padding: 1rem 1.1rem;
+  box-sizing: border-box;
+  display: flex;
+  flex-direction: column;
+  gap: 0.85rem;
+}
+
+.desktop-add-entry__scroll > * {
+  flex: 0 0 auto;
+  min-height: 0;
+}
+
+.desktop-add-entry__hero {
+  display: flex;
+  align-items: center;
+  gap: 0.85rem;
+  padding: 0.75rem;
+  border: 1px solid var(--border);
+  background: #0a0a0a;
+}
+
+.desktop-add-entry__hero-text {
+  flex: 1;
+  min-width: 0;
+}
+
+.desktop-add-entry__title {
+  margin: 0 0 0.15rem;
+  font-size: 1.05rem;
+  letter-spacing: 0.05em;
+}
+
+.desktop-add-entry__row {
+  display: grid;
+  gap: 0.65rem;
+}
+
+.desktop-add-entry__row--3 {
+  grid-template-columns: repeat(3, minmax(0, 1fr));
+}
+
+.desktop-add-entry__row--2 {
+  grid-template-columns: repeat(2, minmax(0, 1fr));
+}
+
+.desktop-add-entry label {
+  gap: 0.3rem;
+  font-size: 0.78rem;
+}
+
+.desktop-add-entry input,
+.desktop-add-entry select {
+  min-height: 40px;
+  width: 100%;
+}
+
+.desktop-add-entry__gen {
+  border: 1px dashed #333;
+  font-size: 0.75rem;
+  text-align: left;
+}
+
+.desktop-add-entry__gen--open {
+  border-color: var(--accent);
+  color: var(--accent);
+}
+
+.desktop-add-entry__generator {
+  padding: 0.75rem;
+  border: 1px solid var(--border);
+  background: #080808;
+}
+
+.desktop-add-entry__actions {
+  position: absolute;
+  bottom: 0;
+  left: 0;
+  right: 0;
+  z-index: 3;
+  display: flex;
+  align-items: center;
+  justify-content: flex-end;
+  gap: 0.5rem;
+  height: var(--add-entry-footer-h);
+  padding: 0 1.1rem;
+  margin: 0;
+  border-top: 1px solid var(--border);
+  background: var(--panel);
+  box-sizing: border-box;
+  flex-shrink: 0;
+}
+
+.desktop-dialog__body:has(.desktop-add-entry) {
+  flex: 1 1 auto;
+  min-height: 0;
+  max-height: calc(100vh - 8rem);
+}
+
+.desktop-dialog__body > .desktop-add-entry {
+  height: 100%;
+  min-height: 240px;
+}
+
+.desktop-add-entry__actions .primary {
+  min-width: 120px;
+}
+
+/* Edit entry still uses Modal wide - single scroll on modal-body */
+.desktop-shell .modal--wide .modal-body {
+  overflow-y: auto;
+  overflow-x: hidden;
+}
+
+.desktop-shell .modal--wide .entry-form {
+  overflow: visible;
+  max-height: none;
 }

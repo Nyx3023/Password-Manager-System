@@ -1,18 +1,20 @@
 import { useEffect, type ReactNode } from "react";
 import { createPortal } from "react-dom";
 
-interface ModalProps {
+interface DesktopDialogProps {
   title: string;
   open: boolean;
   onClose: () => void;
   children: ReactNode;
-  /** Tighter sheet for forms with many controls (e.g. LAN sync). */
-  compact?: boolean;
-  /** Wider layout for desktop forms. */
-  wide?: boolean;
 }
 
-export function Modal({ title, open, onClose, children, compact, wide }: ModalProps) {
+/** Centered desktop dialog - one scroll area, no mobile sheet chrome. */
+export function DesktopDialog({
+  title,
+  open,
+  onClose,
+  children,
+}: DesktopDialogProps) {
   useEffect(() => {
     if (!open) return;
 
@@ -20,16 +22,9 @@ export function Modal({ title, open, onClose, children, compact, wide }: ModalPr
     const body = document.body;
     const prevHtmlOverflow = html.style.overflow;
     const prevBodyOverflow = body.style.overflow;
-    const prevBodyPosition = body.style.position;
-    const prevBodyWidth = body.style.width;
-    const prevBodyTop = body.style.top;
-    const scrollY = window.scrollY;
 
     html.style.overflow = "hidden";
     body.style.overflow = "hidden";
-    body.style.position = "fixed";
-    body.style.width = "100%";
-    body.style.top = `-${scrollY}px`;
 
     const onKey = (e: KeyboardEvent) => {
       if (e.key === "Escape") onClose();
@@ -40,10 +35,6 @@ export function Modal({ title, open, onClose, children, compact, wide }: ModalPr
       window.removeEventListener("keydown", onKey);
       html.style.overflow = prevHtmlOverflow;
       body.style.overflow = prevBodyOverflow;
-      body.style.position = prevBodyPosition;
-      body.style.width = prevBodyWidth;
-      body.style.top = prevBodyTop;
-      window.scrollTo(0, scrollY);
     };
   }, [open, onClose]);
 
@@ -51,20 +42,19 @@ export function Modal({ title, open, onClose, children, compact, wide }: ModalPr
 
   return createPortal(
     <div
-      className="modal-backdrop"
+      className="desktop-dialog-backdrop"
       role="presentation"
       onClick={onClose}
     >
       <div
-        className={`modal panel${compact ? " modal--compact" : ""}${wide ? " modal--wide" : ""}`}
+        className="desktop-dialog panel"
         role="dialog"
         aria-modal="true"
-        aria-labelledby="modal-title"
+        aria-labelledby="desktop-dialog-title"
         onClick={(e) => e.stopPropagation()}
       >
-        <span className="modal-sheet-handle" aria-hidden />
-        <header className="modal-header">
-          <h3 id="modal-title">{title}</h3>
+        <header className="desktop-dialog__header">
+          <h2 id="desktop-dialog-title">{title}</h2>
           <button
             type="button"
             className="modal-close"
@@ -74,7 +64,7 @@ export function Modal({ title, open, onClose, children, compact, wide }: ModalPr
             x
           </button>
         </header>
-        <div className="modal-body">{children}</div>
+        <div className="desktop-dialog__body">{children}</div>
       </div>
     </div>,
     document.body,

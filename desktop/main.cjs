@@ -94,7 +94,7 @@ function buildTrayMenu() {
   const st = lan.status();
   const syncLabel = st.lastSyncAt
     ? `Last sync: ${st.lastSyncAt}`
-    : "LAN sync (use pairing code on phone)";
+    : "LAN sync (same Wi-Fi as phone)";
 
   return Menu.buildFromTemplate([
     {
@@ -114,19 +114,8 @@ function buildTrayMenu() {
       },
     },
     st.running
-      ? {
-          label: st.pairingCode
-            ? `Pairing code: ${st.pairingCode}`
-            : "Pairing code expired",
-          enabled: !!st.pairingCode,
-        }
+      ? { label: "LAN server running", enabled: false }
       : { label: "LAN server stopped", enabled: false },
-    st.running
-      ? {
-          label: "New pairing code",
-          click: () => refreshTray(lan.newPairingCode()),
-        }
-      : { type: "separator" },
     st.running
       ? {
           label: "Stop LAN server",
@@ -251,12 +240,6 @@ function registerIpc() {
 
   ipcMain.handle("lan:stop", async () => {
     const st = await lan.stop();
-    refreshTray();
-    return st;
-  });
-
-  ipcMain.handle("lan:newPairing", () => {
-    const st = lan.newPairingCode();
     refreshTray();
     return st;
   });

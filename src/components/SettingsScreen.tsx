@@ -12,6 +12,7 @@ import { PasswordRequirements } from "./PasswordRequirements";
 import { PeopleManager } from "./PeopleManager";
 import { validateMasterPassword } from "@/shared/passwordPolicy";
 import { isLanPaired } from "@/shared/lanSync";
+import { formatLastSync } from "@/shared/syncTime";
 import {
   DesktopLanPanel,
   type DesktopLanPanelProps,
@@ -64,15 +65,14 @@ interface SettingsScreenProps {
   onPullFromPc?: (
     host: string,
     port: number,
-    pairingCode: string,
   ) => Promise<{ ok: boolean; message: string }>;
   onPushToPc?: (
     host: string,
     port: number,
-    pairingCode: string,
     force?: boolean,
   ) => Promise<{ ok: boolean; message: string }>;
   onOpenLanSync?: () => void;
+  lanLastSyncAt?: string | null;
   desktopLan?: DesktopLanPanelProps;
 }
 
@@ -95,7 +95,7 @@ function SettingsRow({
           {hint && <span className="settings-row-hint">{hint}</span>}
         </span>
         <span className="settings-row-chevron" aria-hidden>
-          â€º
+          ›
         </span>
       </button>
     );
@@ -192,8 +192,13 @@ export function SettingsScreen(props: SettingsScreenProps) {
 
   return (
     <div className="settings">
-      {props.desktopLan && <DesktopLanPanel {...props.desktopLan} />}
+      {props.desktopLan && (
+        <div className="settings-span-full">
+          <DesktopLanPanel {...props.desktopLan} />
+        </div>
+      )}
 
+      <div className="settings-grid">
       <section className="settings-group">
         <SettingsRow
           label="People"
@@ -225,8 +230,8 @@ export function SettingsScreen(props: SettingsScreenProps) {
             label="Sync with PC"
             hint={
               isLanPaired()
-                ? "Saved PC - opens with auto check"
-                : "Pull or push over local Wi-Fi"
+                ? `Last sync ${formatLastSync(props.lanLastSyncAt ?? null)}`
+                : "Scan for PC on same Wi-Fi"
             }
             onClick={() => props.onOpenLanSync?.()}
           />
@@ -240,7 +245,7 @@ export function SettingsScreen(props: SettingsScreenProps) {
             hint={
               autofillEnabled
                 ? "Set up Chrome if Google still appears"
-                : "Required â€” then configure Chrome"
+                : "Required — then configure Chrome"
             }
             onClick={() => setModal("autofill")}
           />
@@ -287,6 +292,7 @@ export function SettingsScreen(props: SettingsScreenProps) {
           </button>
         </section>
       )}
+      </div>
 
       {props.error && <p className="error">{props.error}</p>}
 
@@ -454,3 +460,4 @@ export function SettingsScreen(props: SettingsScreenProps) {
     </div>
   );
 }
+

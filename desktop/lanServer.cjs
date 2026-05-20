@@ -1,6 +1,7 @@
 const http = require("node:http");
 const os = require("node:os");
 const crypto = require("node:crypto");
+const dgram = require("node:dgram");
 
 const DEFAULT_PORT = 9847;
 
@@ -98,30 +99,11 @@ function readRequestBody(req) {
  */
 function createLanServer({ app, vaultPaths, port = DEFAULT_PORT, onVaultWritten }) {
   let server = null;
-  let pairingCode = null;
-  let pairingExpires = 0;
   let lastSyncAt = null;
 
-  const PAIRING_TTL_MS = 10 * 60 * 1000;
-
-  function generatePairingCode() {
-    pairingCode = String(Math.floor(100000 + Math.random() * 900000));
-    pairingExpires = Date.now() + PAIRING_TTL_MS;
-    return pairingCode;
-  }
-
-  function validateToken(req) {
-    if (!pairingCode || Date.now() >= pairingExpires) {
-      return { ok: false, reason: "Pairing code expired. Start the LAN server again on the PC." };
-    }
-    const token =
-      req.headers["x-sync-token"] ||
-      (req.headers.authorization && String(req.headers.authorization).replace(/^Bearer\s+/i, ""));
-    if (!token || String(token).trim() !== pairingCode) {
-      return { ok: false, reason: "Invalid pairing code." };
-    }
-    return { ok: true };
-  }
+  let udpSocket = null;
+  let udpInterval = null;
+  const UDP_PORT = 9846;
 
   function status() {
     const ip = getLanIpv4();
@@ -132,12 +114,15 @@ function createLanServer({ app, vaultPaths, port = DEFAULT_PORT, onVaultWritten 
       virtual: false,
       privateRange: c.privateRange,
     }));
+    const raw = vaultPaths.loadVault(app);
+    const vaultEtag =
+      raw && vaultPaths.isValidVaultEnvelope(raw) ? etagForBody(raw) : null;
     return {
       running: !!server,
       port,
       address: `${ip}:${port}`,
       addresses,
-      pairingCode: server && Date.now() < pairingExpires ? pairingCode : null,
+      vaultEtag,
       lastSyncAt,
     };
   }
@@ -149,7 +134,7 @@ function createLanServer({ app, vaultPaths, port = DEFAULT_PORT, onVaultWritten 
 
   async function handleRequest(req, res) {
     res.setHeader("Access-Control-Allow-Origin", "*");
-    res.setHeader("Access-Control-Allow-Headers", "Content-Type, X-Sync-Token, Authorization, If-Match");
+    res.setHeader("Access-Control-Allow-Headers", "Content-Type, If-Match");
     res.setHeader("Access-Control-Allow-Methods", "GET, PUT, OPTIONS");
 
     if (req.method === "OPTIONS") {
@@ -166,11 +151,6 @@ function createLanServer({ app, vaultPaths, port = DEFAULT_PORT, onVaultWritten 
     }
 
     if (pathname === "/api/vault" && req.method === "GET") {
-      const auth = validateToken(req);
-      if (!auth.ok) {
-        sendJson(res, 401, { error: auth.reason });
-        return;
-      }
       const raw = vaultPaths.loadVault(app);
       if (!raw || !vaultPaths.isValidVaultEnvelope(raw)) {
         sendJson(res, 404, { error: "No vault on this PC." });
@@ -186,11 +166,6 @@ function createLanServer({ app, vaultPaths, port = DEFAULT_PORT, onVaultWritten 
     }
 
     if (pathname === "/api/vault" && req.method === "PUT") {
-      const auth = validateToken(req);
-      if (!auth.ok) {
-        sendJson(res, 401, { error: auth.reason });
-        return;
-      }
       let body;
       try {
         body = await readRequestBody(req);
@@ -264,7 +239,6 @@ function createLanServer({ app, vaultPaths, port = DEFAULT_PORT, onVaultWritten 
         server = null;
       }
 
-      generatePairingCode();
       const s = http.createServer(createRequestHandler());
 
       const fail = (err) => {
@@ -274,8 +248,6 @@ function createLanServer({ app, vaultPaths, port = DEFAULT_PORT, onVaultWritten 
           /* ignore */
         }
         server = null;
-        pairingCode = null;
-        pairingExpires = 0;
         const st = status();
         st.running = false;
         st.error =
@@ -291,41 +263,88 @@ function createLanServer({ app, vaultPaths, port = DEFAULT_PORT, onVaultWritten 
       s.listen(port, "0.0.0.0", () => {
         s.removeListener("error", fail);
         server = s;
+        try {
+          startUdpBeacon();
+        } catch (e) {
+          console.error("Failed to start UDP beacon", e);
+        }
         resolve(status());
       });
     });
   }
 
+  function startUdpBeacon() {
+    if (udpSocket) {
+      stopUdpBeacon();
+    }
+    udpSocket = dgram.createSocket("udp4");
+    udpSocket.on("error", (err) => {
+      console.error("UDP socket error:", err);
+      stopUdpBeacon();
+    });
+    udpSocket.bind(0, () => {
+      try {
+        udpSocket.setBroadcast(true);
+      } catch (err) {
+        console.error("Failed to set UDP broadcast flag:", err);
+      }
+      sendBeacon();
+      udpInterval = setInterval(sendBeacon, 5000);
+    });
+  }
+
+  function sendBeacon() {
+    if (!udpSocket) return;
+    try {
+      const message = JSON.stringify({
+        type: "pms-discovery",
+        port: port
+      });
+      const bytes = Buffer.from(message);
+      udpSocket.send(bytes, 0, bytes.length, UDP_PORT, "255.255.255.255", (err) => {
+        if (err) {
+          console.error("UDP broadcast failed:", err);
+        }
+      });
+    } catch (e) {
+      console.error("UDP beacon error:", e);
+    }
+  }
+
+  function stopUdpBeacon() {
+    if (udpInterval) {
+      clearInterval(udpInterval);
+      udpInterval = null;
+    }
+    if (udpSocket) {
+      try {
+        udpSocket.close();
+      } catch {
+        /* ignore */
+      }
+      udpSocket = null;
+    }
+  }
+
   function stop() {
     return new Promise((resolve) => {
+      stopUdpBeacon();
       if (!server) {
-        pairingCode = null;
-        pairingExpires = 0;
         resolve(status());
         return;
       }
 
       const s = server;
       server = null;
-      pairingCode = null;
-      pairingExpires = 0;
 
       s.close(() => resolve(status()));
     });
-  }
-
-  function newPairingCode() {
-    if (!server) return status();
-    generatePairingCode();
-    return status();
   }
 
   return {
     start,
     stop,
     status,
-    newPairingCode,
-    generatePairingCode,
     DEFAULT_PORT,
   };
 }

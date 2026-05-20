@@ -5,6 +5,8 @@ import type { PersonCategoryId } from "@/shared/types";
 import { MpinConfirmFlow } from "../MpinConfirmFlow";
 import { PasswordRequirements } from "../PasswordRequirements";
 import { RestoreBackup } from "../RestoreBackup";
+import { pullVaultFromPc } from "@/shared/lanSync";
+import { LanSyncModal } from "../LanSyncModal";
 import { validateMasterPassword } from "@/shared/passwordPolicy";
 
 export interface SetupPerson {
@@ -26,7 +28,7 @@ interface SetupWizardProps {
   onRestoreBackup: (content: string, password: string) => Promise<boolean>;
 }
 
-const STEPS = ["people", "password", "biometric", "mpin"] as const;
+const STEPS = ["people", "password", "biometric", "mpin", "lan-sync-password"] as const;
 type Step = (typeof STEPS)[number];
 
 export function SetupWizard({
@@ -47,6 +49,10 @@ export function SetupWizard({
   const [enableBiometrics, setEnableBiometrics] = useState(false);
 
   const [mpin, setMpin] = useState("");
+
+  const [lanSyncOpen, setLanSyncOpen] = useState(false);
+  const [downloadedVault, setDownloadedVault] = useState<string | null>(null);
+  const [lanSyncPw, setLanSyncPw] = useState("");
 
   const passwordValid = validateMasterPassword(password).valid;
 
@@ -75,6 +81,18 @@ export function SetupWizard({
     };
 
     await onComplete(data);
+  };
+
+  const handleLanPull = async (host: string, port: number) => {
+    try {
+      const { content } = await pullVaultFromPc({ host, port });
+      setDownloadedVault(content);
+      setLanSyncOpen(false);
+      setStep("lan-sync-password");
+      return { ok: true, message: "Vault downloaded." };
+    } catch (e) {
+      return { ok: false, message: e instanceof Error ? e.message : "Download failed." };
+    }
   };
 
   return (
@@ -166,6 +184,14 @@ export function SetupWizard({
               onClick={() => setStep("password")}
             >
               Continue
+            </button>
+            <button
+              type="button"
+              className="ghost restore-link"
+              disabled={busy}
+              onClick={() => setLanSyncOpen(true)}
+            >
+              Setup from existing device (LAN)
             </button>
             <RestoreBackup busy={busy} onRestore={onRestoreBackup} />
           </>
@@ -303,7 +329,55 @@ export function SetupWizard({
             </button>
           </>
         )}
+        {step === "lan-sync-password" && (
+          <>
+            <h1 className="setup-title">Unlock Downloaded Vault</h1>
+            <p className="setup-sub">
+              Vault downloaded successfully. Enter the master password to unlock it.
+            </p>
+            <div className="setup-card stack">
+              <label>
+                Master password
+                <input
+                  type="password"
+                  value={lanSyncPw}
+                  onChange={(e) => setLanSyncPw(e.target.value)}
+                  autoFocus
+                />
+              </label>
+            </div>
+            {error && <p className="error">{error}</p>}
+            <button
+              type="button"
+              className="primary block"
+              disabled={busy || !lanSyncPw}
+              onClick={() => void onRestoreBackup(downloadedVault!, lanSyncPw)}
+            >
+              {busy ? "Unlocking..." : "Unlock & Finish"}
+            </button>
+            <button
+              type="button"
+              className="ghost block"
+              disabled={busy}
+              onClick={() => {
+                setDownloadedVault(null);
+                setStep("people");
+              }}
+            >
+              Cancel
+            </button>
+          </>
+        )}
       </main>
+
+      <LanSyncModal
+        open={lanSyncOpen}
+        busy={busy}
+        onClose={() => setLanSyncOpen(false)}
+        onPull={handleLanPull}
+        onPush={async () => ({ ok: false, message: "Push not available during setup." })}
+        onMessage={() => {}}
+      />
     </div>
   );
 }

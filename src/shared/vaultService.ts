@@ -15,6 +15,7 @@ import {
 import { VaultDecryptError } from "./vaultErrors";
 import { loadPrefs, loadVaultFile, savePrefs, saveVaultFile } from "./storage";
 import { normalizePayload } from "./entryUtils";
+import { mergeVaultPayloads } from "./vaultMerge";
 import type {
   EncryptedVaultFile,
   ImportMode,
@@ -460,6 +461,24 @@ export class VaultService {
     await saveVaultFile(fileContent);
   }
 
+  async mergeUnlockedFromRaw(fileContent: string): Promise<void> {
+    this.requireUnlocked();
+    const incoming = parseEncryptedFile(fileContent);
+    const incomingPayload = await decryptPayloadFromFile(this.vaultKey!, incoming);
+    this.payload = mergeVaultPayloads(this.payload!, incomingPayload);
+    await this.save();
+  }
+
+  /** Load encrypted vault from disk and merge into the unlocked session. */
+  async mergeFromDiskAfterSync(): Promise<void> {
+    this.requireUnlocked();
+    const raw = await loadVaultFile();
+    if (!raw) {
+      throw new Error("No vault found on this device.");
+    }
+    await this.mergeUnlockedFromRaw(raw);
+  }
+
   // ============================================================
   // Backup export / import
   // ============================================================
@@ -492,18 +511,7 @@ export class VaultService {
     }
 
     this.requireUnlocked();
-    // Merge people by id (incoming wins for duplicates).
-    const peopleMap = new Map<string, Person>();
-    for (const p of this.payload.people) peopleMap.set(p.id, p);
-    for (const p of incomingPayload.people) peopleMap.set(p.id, p);
-    this.payload.people = [...peopleMap.values()];
-
-    const entryMap = new Map<string, VaultEntry>();
-    for (const entry of this.payload.entries) entryMap.set(entry.id, entry);
-    for (const entry of incomingPayload.entries) entryMap.set(entry.id, entry);
-    this.payload.entries = [...entryMap.values()].sort((a, b) =>
-      b.updatedAt.localeCompare(a.updatedAt),
-    );
+    this.payload = mergeVaultPayloads(this.payload, incomingPayload);
     await this.save();
   }
 
