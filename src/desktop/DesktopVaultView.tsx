@@ -1,5 +1,6 @@
 import { useMemo, useState } from "react";
 import { entryDisplayTitle, normalizeEntry } from "@/shared/entryUtils";
+import { DEFAULT_CATEGORY_ID } from "@/shared/catalog";
 import { CategoryFilter } from "@/components/CategoryFilter";
 import { EntryDetailPane } from "@/components/EntryDetailPane";
 import { EntryForm } from "@/components/EntryForm";
@@ -44,7 +45,7 @@ export function DesktopVaultView(props: DesktopVaultViewProps) {
   const categoryCounts = useMemo(() => {
     const counts: Record<string, number> = {};
     for (const entry of props.entries) {
-      const id = normalizeEntry(entry).categoryId;
+      const id = entry.categoryId ?? DEFAULT_CATEGORY_ID;
       counts[id] = (counts[id] ?? 0) + 1;
     }
     return counts;
