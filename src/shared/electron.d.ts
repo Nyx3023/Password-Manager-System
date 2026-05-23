@@ -27,8 +27,12 @@ export interface ElectronAPI {
   startLanServer: () => Promise<TrayStatus>;
   stopLanServer: () => Promise<TrayStatus>;
   openSettings: () => void;
+  openExtensionFolder: () => Promise<void>;
+  openUrl: (url: string) => Promise<void>;
   onLockRequested: (handler: () => void) => () => void;
   onLanVaultUpdated: (handler: () => void) => () => void;
+  onRequestAutofill: (handler: (data: { id: number; url: string }) => void) => () => void;
+  sendAutofillResponse: (id: number, result: any) => void;
 }
 
 declare global {

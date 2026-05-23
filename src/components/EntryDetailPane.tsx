@@ -1,4 +1,5 @@
 import { useState } from "react";
+import { useClipboard } from "@/hooks/useClipboard";
 import {
   entryDisplayTitle,
   entrySubtitle,
@@ -14,21 +15,28 @@ interface EntryDetailPaneProps {
   people: Person[];
   onEdit: () => void;
   onDelete: () => void;
-  onCopy: (label: string, value: string) => void;
 }
 
 function DetailRow({
   label,
   value,
   secret,
-  onCopy,
 }: {
   label: string;
   value: string;
   secret?: boolean;
-  onCopy: (label: string, value: string) => void;
 }) {
   const [visible, setVisible] = useState(false);
+  const [copied, setCopied] = useState(false);
+  const { copy } = useClipboard();
+
+  const handleCopy = async () => {
+    if (!value) return;
+    await copy(value);
+    setCopied(true);
+    setTimeout(() => setCopied(false), 2000);
+  };
+
   if (!value) return null;
 
   return (
@@ -51,9 +59,10 @@ function DetailRow({
           <button
             type="button"
             className="ghost small"
-            onClick={() => onCopy(label, value)}
+            onClick={() => void handleCopy()}
+            style={copied ? { color: "var(--accent)" } : undefined}
           >
-            Copy
+            {copied ? "Copied!" : "Copy"}
           </button>
         </div>
       </div>
@@ -66,7 +75,6 @@ export function EntryDetailPane({
   people,
   onEdit,
   onDelete,
-  onCopy,
 }: EntryDetailPaneProps) {
   if (!entry) {
     return (
@@ -105,17 +113,23 @@ export function EntryDetailPane({
         </div>
       </div>
 
-      <DetailRow label="Username" value={e.username} onCopy={onCopy} />
-      <DetailRow label="Password" value={e.password} secret onCopy={onCopy} />
-      <DetailRow label="URL" value={e.url} onCopy={onCopy} />
-      {e.notes && (
-        <div className="detail-row">
-          <span className="detail-row-label">Notes</span>
-          <p className="detail-notes">{e.notes}</p>
+      <div className="desktop-detail-grid">
+        <div className="detail-col" style={{ display: "flex", flexDirection: "column", gap: "20px" }}>
+          <DetailRow label="Username" value={e.username} />
+          <DetailRow label="Password" value={e.password} secret />
         </div>
-      )}
+        <div className="detail-col" style={{ display: "flex", flexDirection: "column", gap: "20px" }}>
+          <DetailRow label="URL" value={e.url} />
+          {e.notes && (
+            <div className="detail-row">
+              <span className="detail-row-label">Notes</span>
+              <p className="detail-notes">{e.notes}</p>
+            </div>
+          )}
+        </div>
+      </div>
 
-      <div className="entry-detail-actions">
+      <div className="entry-detail-actions" style={{ display: "grid", gridTemplateColumns: "1fr 1fr", gap: "10px" }}>
         <button type="button" className="primary" onClick={onEdit}>
           Edit
         </button>

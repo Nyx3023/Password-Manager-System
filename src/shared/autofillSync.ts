@@ -4,7 +4,7 @@ import { entryDisplayTitle } from "./entryUtils";
 import { autofillSupported, VaultAutofill } from "./vaultAutofill";
 import type { AutofillCredentialPayload } from "./vaultAutofill";
 
-function hostFromUrl(url: string): string | null {
+export function hostFromUrl(url: string): string | null {
   const trimmed = url.trim();
   if (!trimmed) return null;
   try {

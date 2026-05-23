@@ -10,6 +10,7 @@ const {
 const fs = require("node:fs");
 const http = require("node:http");
 const path = require("node:path");
+const net = require("node:net");
 const vaultPaths = require("./vaultPaths.cjs");
 const { createLanServer } = require("./lanServer.cjs");
 
@@ -249,11 +250,76 @@ function registerIpc() {
     showMainWindow();
     mainWindow?.webContents.send("app:navigate-settings");
   });
+
+  ipcMain.on("app:autofill-response", (_e, data) => {
+    const socket = autofillRequests.get(data.id);
+    if (socket) {
+      try {
+        const payload = Object.assign({ id: data.id }, data.result);
+        socket.write(JSON.stringify(payload) + "\n");
+      } catch (err) {}
+      // Keep socket open for persistent connections!
+      autofillRequests.delete(data.id);
+    }
+  });
+
+  // Open the bundled extension folder in Windows Explorer
+  ipcMain.handle("shell:open-extension-folder", () => {
+    const extDir = path.join(__dirname, "..", "extension");
+    shell.openPath(extDir);
+  });
+
+  // Open a URL in the user's default browser
+  ipcMain.handle("shell:open-url", (_e, url) => {
+    shell.openExternal(url);
+  });
+}
+
+let autofillRequests = new Map();
+let autofillIdCounter = 0;
+
+function startIpcServer() {
+  const PIPE_NAME = '\\\\.\\pipe\\passwordmanager-ext-ipc';
+  const server = net.createServer((socket) => {
+    let dataBuffer = "";
+    socket.on("data", (data) => {
+      dataBuffer += data.toString();
+      if (dataBuffer.endsWith("\n")) {
+        try {
+          const req = JSON.parse(dataBuffer.trim());
+          if (req.type === "REQUEST_AUTOFILL" && req.url) {
+            const reqId = req.id || ++autofillIdCounter;
+            autofillRequests.set(reqId, socket);
+            
+            if (mainWindow && !mainWindow.isDestroyed()) {
+              mainWindow.webContents.send("app:request-autofill", { id: reqId, url: req.url });
+            } else {
+              socket.write(JSON.stringify({ id: reqId, error: "APP_CLOSED" }) + "\n");
+            }
+          } else {
+             socket.write(JSON.stringify({ id: req.id, error: "UNKNOWN_REQUEST" }) + "\n");
+          }
+        } catch(e) {
+          socket.write(JSON.stringify({ error: "INVALID_JSON" }) + "\n");
+        }
+        dataBuffer = ""; // Reset buffer after processing
+      }
+    });
+  });
+
+  server.on('error', (e) => {
+    if (e.code === 'EADDRINUSE') {
+      console.log('IPC server already running');
+    }
+  });
+
+  server.listen(PIPE_NAME);
 }
 
 app.whenReady().then(() => {
   vaultPaths.ensureDataDir(app);
   registerIpc();
+  startIpcServer();
   createWindow();
   createTray();
 });

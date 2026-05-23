@@ -10,13 +10,15 @@ import { useClipboard } from "@/hooks/useClipboard";
 import { useVault } from "@/hooks/useVault";
 import { entriesToAutofillCredentials, hostFromUrl } from "@/shared/autofillSync";
 import { DesktopVaultView } from "./DesktopVaultView";
+import { LiquidBackground } from "@/components/LiquidBackground";
 import "./desktop.css";
+import "./AppDesktopGlass.css";
 
 const AUTO_LOCK_MS = 5 * 60 * 1000;
 
 type Nav = "vault" | "settings";
 
-export default function AppDesktop() {
+export default function AppDesktopGlass() {
   const vault = useVault();
   const { copy } = useClipboard();
   const [toast, setToast] = useState<string | null>(null);
@@ -131,13 +133,6 @@ export default function AppDesktop() {
       const allCreds = entriesToAutofillCredentials(vault.entries, vault.people);
       const matches = allCreds.filter(c => c.matchHosts.includes(reqHost));
       
-      console.log(`[Autofill] Request for URL: ${data.url} -> Host: ${reqHost}`);
-      console.log(`[Autofill] Total vault entries: ${vault.entries.length}, Autofillable: ${allCreds.length}`);
-      console.log(`[Autofill] Matches found: ${matches.length}`);
-      if (matches.length === 0 && allCreds.length > 0) {
-        console.log(`[Autofill] Example stored host:`, allCreds[0].matchHosts);
-      }
-      
       window.electronAPI!.sendAutofillResponse(data.id, { status: "OK", credentials: matches });
     });
   }, [vault.unlocked, vault.entries, vault.people]);
@@ -180,42 +175,46 @@ export default function AppDesktop() {
 
   if (!vault.ready) {
     return (
-      <div className="desktop-loading">
-        <p className="muted">Loading...</p>
+      <div className="dash glass-layout">
+        <LiquidBackground />
+        <div className="glass-loading">Loading...</div>
       </div>
     );
   }
 
   if (!vault.unlocked) {
     return (
-      <div className="desktop-auth">
-        <div className="desktop-auth-card">
-          {!vault.hasVault ? (
-            <SetupWizard
-              busy={vault.busy}
-              error={vault.error}
-              onComplete={vault.completeSetup}
-              onRestoreBackup={(content, password) =>
-                vault.importVault(content, password, "replace")
-              }
-            />
-          ) : (
-            <UnlockScreen
-              layout="desktop"
-              busy={vault.busy}
-              error={vault.error}
-              biometricsEnabled={false}
-              biometricsAvailable={false}
-              mpinEnabled={vault.mpinEnabled}
-              onUnlockPassword={vault.unlockWithPassword}
-              onUnlockMpin={vault.unlockWithMpin}
-              onUnlockBiometric={vault.unlockWithBiometrics}
-              onRestoreBackup={(content, password) =>
-                vault.importVault(content, password, "replace")
-              }
-              onResetApp={vault.resetApp}
-            />
-          )}
+      <div className="dash glass-layout">
+        <LiquidBackground />
+        <div className="glass-auth-container">
+          <div className="glass glass-auth-card">
+            {!vault.hasVault ? (
+              <SetupWizard
+                busy={vault.busy}
+                error={vault.error}
+                onComplete={vault.completeSetup}
+                onRestoreBackup={(content, password) =>
+                  vault.importVault(content, password, "replace")
+                }
+              />
+            ) : (
+              <UnlockScreen
+                layout="desktop"
+                busy={vault.busy}
+                error={vault.error}
+                biometricsEnabled={false}
+                biometricsAvailable={false}
+                mpinEnabled={vault.mpinEnabled}
+                onUnlockPassword={vault.unlockWithPassword}
+                onUnlockMpin={vault.unlockWithMpin}
+                onUnlockBiometric={vault.unlockWithBiometrics}
+                onRestoreBackup={(content, password) =>
+                  vault.importVault(content, password, "replace")
+                }
+                onResetApp={vault.resetApp}
+              />
+            )}
+          </div>
         </div>
       </div>
     );
@@ -227,6 +226,8 @@ export default function AppDesktop() {
 
   return (
     <div className="desktop-shell">
+      <LiquidBackground />
+      
       <aside className="desktop-sidebar">
         <p className="desktop-brand">PASSWORD MANAGER</p>
         <div className="dot-matrix desktop-dots" aria-hidden>

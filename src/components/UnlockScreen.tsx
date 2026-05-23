@@ -86,134 +86,269 @@ export function UnlockScreen({
         isDesktop ? " unlock-screen--desktop" : ""
       }`}
     >
-      <div className="unlock-mpin-center">
-        {busy && (
-          <div className="unlock-loading-overlay" aria-hidden={!busy}>
-            <LoadingIndicator
-              label={
-                mode === "mpin"
-                  ? "Unlocking..."
-                  : "Checking password..."
-              }
-            />
-          </div>
-        )}
-        <p className="setup-brand">PASSWORD MANAGER</p>
-        <div className="dot-matrix small" aria-hidden>
-          {Array.from({ length: 12 }).map((_, i) => (
-            <span
-              key={i}
-              className={i % 5 === 0 ? "dot dot--accent" : "dot"}
-            />
-          ))}
+      {busy && (
+        <div className="unlock-loading-overlay" aria-hidden={!busy}>
+          <LoadingIndicator
+            label={
+              mode === "mpin"
+                ? "Unlocking..."
+                : "Checking password..."
+            }
+          />
         </div>
+      )}
 
-        {mode === "mpin" && mpinEnabled && (
-          <>
-            <p className="label-mono center-text">ENTER MPIN</p>
-            <MpinPad
-              size={isDesktop ? "desktop" : "large"}
-              value={mpin}
-              errorFlash={mpinErrorFlash}
-              disabled={busy}
-              onChange={setMpin}
-              onComplete={(code) => void tryMpinUnlock(code)}
-            />
-            {canUseBiometric && (
-              <button
-                type="button"
-                className="text-link"
-                disabled={busy}
-                onClick={() => void tryBiometricUnlock()}
-              >
-                Use biometrics
-              </button>
-            )}
-            <button
-              type="button"
-              className="text-link"
-              onClick={() => {
-                setMode("recovery");
-                setMpin("");
-              }}
-            >
-              Forgot MPIN?
-            </button>
-          </>
-        )}
-
-        {mode === "recovery" && (
-          <>
-            <h1 className="setup-title center-text">Recovery unlock</h1>
-            <p className="setup-sub center-text">
-              Master password is for recovery only. Use it if you forgot your
-              MPIN or need to export your vault.
-            </p>
-            <form
-              onSubmit={handlePasswordSubmit}
-              className="stack unlock-password-form"
-            >
-              <label>
-                Master password
-                <input
-                  type="password"
-                  autoComplete="current-password"
-                  value={password}
-                  onChange={(e) => setPassword(e.target.value)}
-                  required
-                  autoFocus
+      {isDesktop ? (
+        <div className="unlock-desktop-split">
+          {/* Left Pane: Logo, Branding, Vault visual */}
+          <div className="unlock-left-pane">
+            <div className="vault-logo-badge">🔐</div>
+            <p className="setup-brand">PASSWORD MANAGER</p>
+            <div className="dot-matrix small" aria-hidden>
+              {Array.from({ length: 12 }).map((_, i) => (
+                <span
+                  key={i}
+                  className={i % 5 === 0 ? "dot dot--accent" : "dot"}
                 />
-              </label>
-              {error && !busy && <p className="error">{error}</p>}
-              {busy ? (
-                <LoadingIndicator label="Unlocking..." />
-              ) : (
-                <button type="submit" className="primary block">
-                  Unlock with master password
+              ))}
+            </div>
+            <p className="setup-sub center-text" style={{ fontSize: "10px", opacity: 0.5, marginTop: "12px", textTransform: "uppercase", letterSpacing: "0.08em" }}>
+              Secure Offline Vault
+            </p>
+          </div>
+
+          {/* Vertical Divider */}
+          <div className="unlock-divider"></div>
+
+          {/* Right Pane: MPIN/Password Inputs */}
+          <div className="unlock-right-pane">
+            {mode === "mpin" && mpinEnabled && (
+              <>
+                <p className="label-mono center-text">ENTER MPIN</p>
+                <MpinPad
+                  size="desktop"
+                  value={mpin}
+                  errorFlash={mpinErrorFlash}
+                  disabled={busy}
+                  onChange={setMpin}
+                  onComplete={(code) => void tryMpinUnlock(code)}
+                />
+                {canUseBiometric && (
+                  <button
+                    type="button"
+                    className="text-link"
+                    disabled={busy}
+                    onClick={() => void tryBiometricUnlock()}
+                  >
+                    Use biometrics
+                  </button>
+                )}
+                <button
+                  type="button"
+                  className="text-link"
+                  onClick={() => {
+                    setMode("recovery");
+                    setMpin("");
+                  }}
+                >
+                  Forgot MPIN?
+                </button>
+              </>
+            )}
+
+            {mode === "recovery" && (
+              <>
+                <h2 className="setup-title center-text" style={{ fontSize: "18px", marginBottom: "8px" }}>Recovery unlock</h2>
+                <p className="setup-sub center-text" style={{ fontSize: "12px", marginBottom: "16px" }}>
+                  Use Master password if you forgot your MPIN.
+                </p>
+                <form
+                  onSubmit={handlePasswordSubmit}
+                  className="stack unlock-password-form"
+                >
+                  <label>
+                    Master password
+                    <input
+                      type="password"
+                      autoComplete="current-password"
+                      value={password}
+                      onChange={(e) => setPassword(e.target.value)}
+                      required
+                      autoFocus
+                    />
+                  </label>
+                  {error && !busy && <p className="error">{error}</p>}
+                  {busy ? (
+                    <LoadingIndicator label="Unlocking..." />
+                  ) : (
+                    <button type="submit" className="primary block">
+                      Unlock
+                    </button>
+                  )}
+                </form>
+                {mpinEnabled && (
+                  <button
+                    type="button"
+                    className="text-link"
+                    onClick={() => {
+                      setMode("mpin");
+                      setPassword("");
+                    }}
+                    style={{ marginTop: "12px" }}
+                  >
+                    Back to MPIN
+                  </button>
+                )}
+                {onResetApp && (
+                  <button
+                    type="button"
+                    className="dev-reset-btn"
+                    disabled={busy}
+                    onClick={() => void handleReset()}
+                  >
+                    Reset app (dev)
+                  </button>
+                )}
+              </>
+            )}
+
+            {mode === "mpin" && !mpinEnabled && (
+              <>
+                <p className="setup-sub center-text">
+                  This vault has no MPIN yet. Unlock with your master password, then
+                  set an MPIN in Settings.
+                </p>
+                <button
+                  type="button"
+                  className="primary block"
+                  onClick={() => setMode("recovery")}
+                >
+                  Recovery unlock
+                </button>
+              </>
+            )}
+          </div>
+        </div>
+      ) : (
+        /* Mobile Layout: standard centered */
+        <div className="unlock-mpin-center">
+          <p className="setup-brand">PASSWORD MANAGER</p>
+          <div className="dot-matrix small" aria-hidden>
+            {Array.from({ length: 12 }).map((_, i) => (
+              <span
+                key={i}
+                className={i % 5 === 0 ? "dot dot--accent" : "dot"}
+              />
+            ))}
+          </div>
+
+          {mode === "mpin" && mpinEnabled && (
+            <>
+              <p className="label-mono center-text">ENTER MPIN</p>
+              <MpinPad
+                size="large"
+                value={mpin}
+                errorFlash={mpinErrorFlash}
+                disabled={busy}
+                onChange={setMpin}
+                onComplete={(code) => void tryMpinUnlock(code)}
+              />
+              {canUseBiometric && (
+                <button
+                  type="button"
+                  className="text-link"
+                  disabled={busy}
+                  onClick={() => void tryBiometricUnlock()}
+                >
+                  Use biometrics
                 </button>
               )}
-            </form>
-            {mpinEnabled && (
               <button
                 type="button"
                 className="text-link"
                 onClick={() => {
-                  setMode("mpin");
-                  setPassword("");
+                  setMode("recovery");
+                  setMpin("");
                 }}
               >
-                Back to MPIN
+                Forgot MPIN?
               </button>
-            )}
-            {onResetApp && (
+            </>
+          )}
+
+          {mode === "recovery" && (
+            <>
+              <h1 className="setup-title center-text">Recovery unlock</h1>
+              <p className="setup-sub center-text">
+                Master password is for recovery only. Use it if you forgot your
+                MPIN or need to export your vault.
+              </p>
+              <form
+                onSubmit={handlePasswordSubmit}
+                className="stack unlock-password-form"
+              >
+                <label>
+                  Master password
+                  <input
+                    type="password"
+                    autoComplete="current-password"
+                    value={password}
+                    onChange={(e) => setPassword(e.target.value)}
+                    required
+                    autoFocus
+                  />
+                </label>
+                {error && !busy && <p className="error">{error}</p>}
+                {busy ? (
+                  <LoadingIndicator label="Unlocking..." />
+                ) : (
+                  <button type="submit" className="primary block">
+                    Unlock with master password
+                  </button>
+                )}
+              </form>
+              {mpinEnabled && (
+                <button
+                  type="button"
+                  className="text-link"
+                  onClick={() => {
+                    setMode("mpin");
+                    setPassword("");
+                  }}
+                >
+                  Back to MPIN
+                </button>
+              )}
+              {onResetApp && (
+                <button
+                  type="button"
+                  className="dev-reset-btn"
+                  disabled={busy}
+                  onClick={() => void handleReset()}
+                >
+                  Reset app (dev)
+                </button>
+              )}
+            </>
+          )}
+
+          {mode === "mpin" && !mpinEnabled && (
+            <>
+              <p className="setup-sub center-text">
+                This vault has no MPIN yet. Unlock with your master password, then
+                set an MPIN in Settings.
+              </p>
               <button
                 type="button"
-                className="dev-reset-btn"
-                disabled={busy}
-                onClick={() => void handleReset()}
+                className="primary block"
+                onClick={() => setMode("recovery")}
               >
-                Reset app (dev)
+                Recovery unlock
               </button>
-            )}
-          </>
-        )}
-
-        {mode === "mpin" && !mpinEnabled && (
-          <>
-            <p className="setup-sub center-text">
-              This vault has no MPIN yet. Unlock with your master password, then
-              set an MPIN in Settings.
-            </p>
-            <button
-              type="button"
-              className="primary block"
-              onClick={() => setMode("recovery")}
-            >
-              Recovery unlock
-            </button>
-          </>
-        )}
-      </div>
+            </>
+          )}
+        </div>
+      )}
     </div>
   );
 }

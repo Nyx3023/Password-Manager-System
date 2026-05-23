@@ -15,6 +15,8 @@ contextBridge.exposeInMainWorld("electronAPI", {
   startLanServer: () => ipcRenderer.invoke("lan:start"),
   stopLanServer: () => ipcRenderer.invoke("lan:stop"),
   openSettings: () => ipcRenderer.send("app:open-settings"),
+  openExtensionFolder: () => ipcRenderer.invoke("shell:open-extension-folder"),
+  openUrl: (url) => ipcRenderer.invoke("shell:open-url", url),
   onLockRequested: (handler) => {
     const listener = () => handler();
     ipcRenderer.on("app:lock-requested", listener);
@@ -24,5 +26,13 @@ contextBridge.exposeInMainWorld("electronAPI", {
     const listener = () => handler();
     ipcRenderer.on("lan-vault-updated", listener);
     return () => ipcRenderer.removeListener("lan-vault-updated", listener);
+  },
+  onRequestAutofill: (handler) => {
+    const listener = (_e, data) => handler(data);
+    ipcRenderer.on("app:request-autofill", listener);
+    return () => ipcRenderer.removeListener("app:request-autofill", listener);
+  },
+  sendAutofillResponse: (id, result) => {
+    ipcRenderer.send("app:autofill-response", { id, result });
   },
 });

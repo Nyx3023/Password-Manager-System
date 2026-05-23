@@ -39,6 +39,7 @@ export function DesktopVaultView(props: DesktopVaultViewProps) {
   const [personFilter, setPersonFilter] = useState<string | null>(null);
   const [selected, setSelected] = useState<VaultEntry | null>(null);
   const [editing, setEditing] = useState(false);
+  const [listColumns, setListColumns] = useState<number>(3);
 
   const categoryCounts = useMemo(() => {
     const counts: Record<string, number> = {};
@@ -61,11 +62,27 @@ export function DesktopVaultView(props: DesktopVaultViewProps) {
             onChange={(e) => setQuery(e.target.value)}
           />
 
-          <CategoryFilter
-            active={categoryFilter}
-            counts={categoryCounts}
-            onChange={setCategoryFilter}
-          />
+          <div style={{ display: "flex", justifyContent: "space-between", alignItems: "center", marginBottom: "0.5rem" }}>
+            <CategoryFilter
+              active={categoryFilter}
+              counts={categoryCounts}
+              onChange={setCategoryFilter}
+            />
+            <div className="desktop-columns-toggle" style={{ display: "flex", gap: "4px", alignItems: "center" }}>
+              <span className="muted small">Columns:</span>
+              {[1, 2, 3].map(c => (
+                <button 
+                  key={c} 
+                  type="button" 
+                  className={`ghost small ${listColumns === c ? "active" : ""}`} 
+                  onClick={() => setListColumns(c)}
+                  style={listColumns === c ? { borderColor: "var(--accent)", color: "var(--text)" } : {}}
+                >
+                  {c}
+                </button>
+              ))}
+            </div>
+          </div>
 
           {props.people.length > 0 && (
             <div className="category-filter desktop-filter-row">
@@ -103,10 +120,18 @@ export function DesktopVaultView(props: DesktopVaultViewProps) {
             personFilter={personFilter}
             selectedId={selected?.id ?? null}
             onSelect={(entry) => setSelected(entry)}
+            columns={listColumns}
           />
         </div>
+      </div>
 
-        <div className="desktop-detail-pane-wrap">
+      <Modal
+        title="Password Details"
+        open={!!selected && !editing}
+        onClose={() => setSelected(null)}
+        wide
+      >
+        <div className="desktop-detail-modal">
           <EntryDetailPane
             entry={selected}
             people={props.people}
@@ -123,10 +148,9 @@ export function DesktopVaultView(props: DesktopVaultViewProps) {
                 props.onMessage("Deleted.");
               }
             }}
-            onCopy={props.onCopy}
           />
         </div>
-      </div>
+      </Modal>
 
       <DesktopDialog
         title="Add password"
@@ -159,7 +183,6 @@ export function DesktopVaultView(props: DesktopVaultViewProps) {
             onSave={async (data) => {
               await props.onUpdate(selected.id, data);
               setEditing(false);
-              setSelected(null);
               props.onMessage("Updated.");
             }}
           />

@@ -1,0 +1,263 @@
+import { useCallback, useEffect, useState, useMemo } from "react";
+import { SetupWizard } from "@/components/setup/SetupWizard";
+import { UnlockScreen } from "@/components/UnlockScreen";
+import { VaultScreen } from "@/components/VaultScreen";
+import { useAutoLock } from "@/hooks/useAutoLock";
+import { useClipboard } from "@/hooks/useClipboard";
+import { useVault } from "@/hooks/useVault";
+import { isLanPaired } from "@/shared/lanSync";
+import { autofillSupported, VaultAutofill } from "@/shared/vaultAutofill";
+import {
+  startLanServerNative,
+  stopLanServerNative,
+  setServerVaultNative,
+  listenForVaultPushNative,
+} from "@/shared/vaultLanHttp";
+import type { TrayStatus } from "@/shared/electron.d";
+import { loadVaultFile, saveVaultFile } from "@/shared/storage";
+import { LiquidBackground } from "@/components/LiquidBackground";
+
+// Import the same CSS layout from desktop for the glass theme
+import "@/desktop/AppDesktopGlass.css";
+
+const AUTO_LOCK_MS = 5 * 60 * 1000;
+
+export default function AppMobileGlass() {
+  const vault = useVault();
+  const { copy } = useClipboard();
+  const [toast, setToast] = useState<string | null>(null);
+  const [lanStatus, setLanStatus] = useState<TrayStatus | null>(null);
+
+  useEffect(() => {
+    void vault.init();
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, []);
+
+  useEffect(() => {
+    if (!autofillSupported()) return;
+
+    const listener = VaultAutofill.addListener("autofillUnlockRequired", () => {
+      if (vault.unlocked) {
+        void VaultAutofill.notifyUnlocked();
+      }
+    });
+
+    void VaultAutofill.getPendingAuthentication().then(({ pending }) => {
+      if (pending && vault.unlocked) {
+        void VaultAutofill.notifyUnlocked();
+      }
+    });
+
+    return () => {
+      void listener.then((h) => h.remove());
+    };
+  }, [vault.unlocked]);
+
+  useEffect(() => {
+    if (!autofillSupported() || !vault.unlocked) return;
+
+    const onVisible = () => {
+      if (document.visibilityState === "visible") {
+        void VaultAutofill.notifyUnlocked();
+      }
+    };
+
+    document.addEventListener("visibilitychange", onVisible);
+    return () => document.removeEventListener("visibilitychange", onVisible);
+  }, [vault.unlocked]);
+
+  useAutoLock(vault.unlocked, AUTO_LOCK_MS, vault.lock);
+
+  useEffect(() => {
+    if (!vault.unlocked || !isLanPaired()) return;
+
+    void vault.checkRemoteSync();
+
+    const interval = window.setInterval(() => {
+      void vault.checkRemoteSync();
+    }, 45_000);
+
+    const onVisible = () => {
+      if (document.visibilityState === "visible") {
+        void vault.checkRemoteSync();
+      }
+    };
+    document.addEventListener("visibilitychange", onVisible);
+
+    return () => {
+      window.clearInterval(interval);
+      document.removeEventListener("visibilitychange", onVisible);
+    };
+  }, [vault.unlocked, vault.checkRemoteSync]);
+
+  const showToast = useCallback((message: string) => {
+    setToast(message);
+    window.setTimeout(() => setToast(null), 3000);
+  }, []);
+
+  const handleCopy = useCallback(
+    async (label: string, value: string) => {
+      if (!value) return;
+      await copy(value);
+      showToast(`${label} copied - clears in 30s`);
+    },
+    [copy, showToast],
+  );
+
+  const startLan = useCallback(async () => {
+    const raw = await loadVaultFile();
+    if (raw) await setServerVaultNative(raw);
+    const st = await startLanServerNative();
+    setLanStatus(st);
+    showToast("LAN server started");
+  }, [showToast]);
+
+  const stopLan = useCallback(async () => {
+    const st = await stopLanServerNative();
+    setLanStatus(st);
+    showToast("LAN server stopped");
+  }, [showToast]);
+
+  const refreshLanStatus = useCallback(async () => {
+    if (lanStatus?.running) {
+      const raw = await loadVaultFile();
+      if (raw) await setServerVaultNative(raw);
+    }
+  }, [lanStatus?.running]);
+
+  useEffect(() => {
+    void refreshLanStatus();
+  }, [vault.lastSyncAt, refreshLanStatus]);
+
+  useEffect(() => {
+    if (!lanStatus?.running) return;
+
+    const unsubPromise = listenForVaultPushNative(({ vaultData }) => {
+      void saveVaultFile(vaultData).then(() => {
+        if (!vault.unlocked) return;
+        vault.pulseSyncVisual("syncing");
+        void vault.reloadFromDiskAfterSync().then((ok) => {
+          if (ok) {
+            vault.pulseSyncVisual("success", 2000);
+          } else {
+            vault.pulseSyncVisual("error", 3000);
+          }
+        });
+      });
+    });
+
+    return () => {
+      void unsubPromise.then((unsub) => unsub());
+    };
+  }, [lanStatus?.running, vault]);
+
+  const desktopLan = useMemo(() => {
+    return {
+      status: lanStatus,
+      busy: vault.busy,
+      isPhone: true,
+      onRefresh: refreshLanStatus,
+      onStart: startLan,
+      onStop: stopLan,
+      onCopyAddress: (address: string) => {
+        void copy(address);
+        showToast("Address copied.");
+      },
+    };
+  }, [lanStatus, vault.busy, refreshLanStatus, startLan, stopLan, copy, showToast]);
+
+  if (!vault.ready) {
+    return (
+      <div className="dash glass-layout">
+        <LiquidBackground />
+        <div className="glass-loading">Loading...</div>
+      </div>
+    );
+  }
+
+  if (!vault.unlocked) {
+    if (!vault.hasVault) {
+      return (
+        <div className="dash glass-layout">
+          <LiquidBackground />
+          <div className="glass-auth-container">
+            <div className="glass glass-auth-card">
+              <SetupWizard
+                busy={vault.busy}
+                error={vault.error}
+                onComplete={vault.completeSetup}
+                onRestoreBackup={(content, password) =>
+                  vault.importVault(content, password, "replace")
+                }
+              />
+            </div>
+          </div>
+        </div>
+      );
+    }
+
+    return (
+      <div className="dash glass-layout">
+        <LiquidBackground />
+        <div className="glass-auth-container">
+          <div className="glass glass-auth-card">
+            <UnlockScreen
+              busy={vault.busy}
+              error={vault.error}
+              biometricsEnabled={vault.biometricsEnabled}
+              biometricsAvailable={vault.biometricsAvailable}
+              mpinEnabled={vault.mpinEnabled}
+              onUnlockPassword={vault.unlockWithPassword}
+              onUnlockMpin={vault.unlockWithMpin}
+              onUnlockBiometric={vault.unlockWithBiometrics}
+              onRestoreBackup={(content, password) =>
+                vault.importVault(content, password, "replace")
+              }
+              onResetApp={vault.resetApp}
+            />
+          </div>
+        </div>
+      </div>
+    );
+  }
+
+  return (
+    <div className="glass-mobile-shell">
+      <LiquidBackground />
+      <VaultScreen
+        entries={vault.entries}
+        people={vault.people}
+        biometricsEnabled={vault.biometricsEnabled}
+        biometricsAvailable={vault.biometricsAvailable}
+        mpinEnabled={vault.mpinEnabled}
+        busy={vault.busy}
+        error={vault.error}
+        toast={toast}
+        onLock={vault.lock}
+        onAdd={vault.addEntry}
+        onUpdate={vault.updateEntry}
+        onDelete={vault.deleteEntry}
+        onCopy={handleCopy}
+        onAddPerson={vault.addPerson}
+        onUpdatePerson={vault.updatePerson}
+        onDeletePerson={vault.deletePerson}
+        onEnableBiometrics={vault.enableBiometrics}
+        onDisableBiometrics={vault.disableBiometrics}
+        onSetMpin={vault.setMpin}
+        onRemoveMpin={vault.removeMpin}
+        onChangeMasterPassword={vault.changeMasterPassword}
+        onExport={vault.exportVault}
+        onImport={vault.importVault}
+        onImportChromeCsv={vault.importChromeCsv}
+        onMessage={showToast}
+        onResetApp={vault.resetApp}
+        onPullFromPc={vault.pullFromPc}
+        onPushToPc={vault.pushToPc}
+        desktopLan={desktopLan}
+        syncVisual={vault.syncVisual}
+        lastSyncAt={vault.lastSyncAt}
+        onSyncVisual={vault.pulseSyncVisual}
+      />
+    </div>
+  );
+}

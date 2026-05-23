@@ -12,11 +12,13 @@
     "desktop": "npm run build:desktop && electron .",
     "build": "tsc -p tsconfig.json && vite build",
     "build:desktop": "tsc -p tsconfig.json && vite build --mode desktop",
+    "pack:win": "npm run build:desktop && npx electron-builder --win --x64 --dir",
     "build:android": "npm run build && npx cap sync android",
     "cap:add": "npx cap add android",
     "cap:open": "npx cap open android",
     "preview": "vite preview",
     "icons:download": "node scripts/download-icons.mjs"
+
   },
   "dependencies": {
     "@capacitor/android": "^7.2.0",

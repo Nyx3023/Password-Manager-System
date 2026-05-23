@@ -20,6 +20,7 @@ interface EntryListProps {
   personFilter: string | null;
   selectedId: string | null;
   onSelect: (entry: VaultEntry) => void;
+  columns?: number;
 }
 
 export function EntryList({
@@ -30,6 +31,7 @@ export function EntryList({
   personFilter,
   selectedId,
   onSelect,
+  columns,
 }: EntryListProps) {
   const [page, setPage] = useState(1);
   const normalized = query.trim().toLowerCase();
@@ -69,12 +71,20 @@ export function EntryList({
 
   return (
     <>
-      <ul className="entry-list">
+      <ul 
+        className="entry-list" 
+        style={columns ? { 
+          display: "grid", 
+          gridTemplateColumns: `repeat(${columns}, 1fr)`, 
+          gap: "10px",
+          alignContent: "start"
+        } : undefined}
+      >
         {pageItems.map((entry) => {
           const e = normalizeEntry(entry);
           const person = findPerson(people, e);
           return (
-            <li key={entry.id}>
+            <li key={entry.id} style={columns ? { marginBottom: 0 } : undefined}>
               <button
                 type="button"
                 className={`entry-card${selectedId === entry.id ? " active" : ""}`}

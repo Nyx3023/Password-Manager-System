@@ -1,0 +1,30 @@
+{
+  "manifest_version": 3,
+  "name": "Password Manager Autofill",
+  "key": "MIIBIjANBgkqhkiG9w0BAQEFAAOCAQ8AMIIBCgKCAQEAn/SyfAXPgWqJJ7tBw5RCMDYFff5+fUcaTf0A4Zs6+HOEwkSeCruPv5/nWCFRgx+t3v7urBbNq+8JgPmxz2HXoPKybB6SncgzLL03DYa6Ei6V6LjuJsE64yMrvv6Yfz/kKkSrUTzixHPXKOfMebQ9eo7i40kRWCZiTfxglCMzNevbmIrLDRKBBh6rou4+qKX2bORvGhczsk3J6r4KRN9VUXUMPdBGM5BU4GnU0uJphma/f7nlvwKDGdXbjDNfeGYLHF5rqp/bWJeyS/TdriQp0ETL5MPx0OEQqwNJK4hh/5s40NDQcy2ofpIpEl8qz/hfsuh3f7mUaRoJGvwtyl/0NQIDAQAB",
+  "version": "1.0.0",
+  "description": "Secure, completely offline autofill extension that bridges to the Desktop Password Manager.",
+  "permissions": [
+    "nativeMessaging",
+    "activeTab"
+  ],
+  "host_permissions": [
+    "<all_urls>"
+  ],
+  "background": {
+    "scripts": ["background.js"]
+  },
+  "content_scripts": [
+    {
+      "matches": ["<all_urls>"],
+      "js": ["content.js"],
+      "run_at": "document_idle"
+    }
+  ],
+  "browser_specific_settings": {
+    "gecko": {
+      "id": "autofill@passwordmanager.com",
+      "strict_min_version": "109.0"
+    }
+  }
+}

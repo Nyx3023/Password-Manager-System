@@ -1,0 +1,41 @@
+{
+  "appId": "com.passwordmanager.desktop",
+  "productName": "Password Manager",
+  "copyright": "Copyright © 2025 Password Manager",
+  "directories": {
+    "buildResources": "build",
+    "output": "dist-electron"
+  },
+  "files": [
+    "dist/**/*",
+    "desktop/**/*",
+    "extension/**/*",
+    "package.json",
+    "node_modules/**/*",
+    "!node_modules/.cache/**/*",
+    "!android/**/*",
+    "!src/**/*",
+    "!.git/**/*"
+  ],
+  "extraFiles": [
+    {
+      "from": "extension",
+      "to": "extension",
+      "filter": ["**/*"]
+    }
+  ],
+  "win": {
+    "target": [
+      {
+        "target": "dir",
+        "arch": ["x64"]
+      }
+    ],
+    "executableName": "PasswordManager",
+    "icon": "build/icon.ico"
+  },
+  "nsis": {
+    "oneClick": false,
+    "allowToChangeInstallationDirectory": true
+  }
+}

@@ -1,0 +1,748 @@
+/* iOS 26 Liquid Glass CSS Alignment Overhaul */
+
+[data-theme="ios-glass"] {
+  --glass-bg: rgba(255, 255, 255, 0.08);
+  --glass-blur: blur(24px) saturate(180%);
+  --glass-border: rgba(255, 255, 255, 0.16);
+  --glass-border-top: rgba(255, 255, 255, 0.32);
+  --glass-border-left: rgba(255, 255, 255, 0.22);
+  --glass-shadow: 0 10px 40px rgba(0, 0, 0, 0.35), inset 0 1px 0 rgba(255, 255, 255, 0.22), inset 0 -1px 0 rgba(0, 0, 0, 0.15);
+  --accent-glow: 0 0 16px rgba(79, 142, 247, 0.4);
+}
+
+/* Base typography and body defaults */
+[data-theme="ios-glass"],
+[data-theme="ios-glass"] input,
+[data-theme="ios-glass"] button,
+[data-theme="ios-glass"] select,
+[data-theme="ios-glass"] textarea {
+  font-family: -apple-system, 'SF Pro Display', BlinkMacSystemFont, sans-serif;
+  -webkit-font-smoothing: antialiased;
+}
+
+/* Shared presets */
+.glass {
+  background: var(--glass-bg);
+  backdrop-filter: var(--glass-blur);
+  -webkit-backdrop-filter: var(--glass-blur);
+  border: 1px solid var(--glass-border);
+  border-top-color: var(--glass-border-top);
+  border-left-color: var(--glass-border-left);
+  box-shadow: var(--glass-shadow);
+  border-radius: 22px;
+  position: relative;
+  overflow: hidden;
+}
+
+.glass::before {
+  content: '';
+  position: absolute;
+  top: 0; left: 0; right: 0;
+  height: 1px;
+  background: linear-gradient(90deg, transparent, rgba(255, 255, 255, 0.4), transparent);
+  pointer-events: none;
+}
+
+.glass-pill {
+  background: rgba(255, 255, 255, 0.12);
+  backdrop-filter: blur(16px);
+  -webkit-backdrop-filter: blur(16px);
+  border: 1px solid rgba(255, 255, 255, 0.2);
+  border-top-color: rgba(255, 255, 255, 0.35);
+  box-shadow: 0 4px 16px rgba(0, 0, 0, 0.25), inset 0 1px 0 rgba(255, 255, 255, 0.2);
+  border-radius: 100px;
+}
+
+.glass-sm {
+  background: rgba(255, 255, 255, 0.06);
+  backdrop-filter: blur(12px);
+  -webkit-backdrop-filter: blur(12px);
+  border: 1px solid rgba(255, 255, 255, 0.14);
+  border-top-color: rgba(255, 255, 255, 0.25);
+  box-shadow: 0 4px 20px rgba(0, 0, 0, 0.3), inset 0 1px 0 rgba(255, 255, 255, 0.18);
+  border-radius: 14px;
+}
+
+/* Background floating animation orbs styling integrated from dynamic filters */
+[data-theme="ios-glass"] .liquid-bg-container {
+  z-index: 1 !important;
+}
+
+/* ==========================================================================
+   Desktop-Specific Layout Alignment
+   ========================================================================== */
+
+/* Main layout wrapper overrides */
+[data-theme="ios-glass"] .desktop-shell {
+  background: linear-gradient(135deg, #070714 0%, #0d1730 30%, #0b1f3b 50%, #170b2a 70%, #070714 100%) !important;
+  position: relative;
+  z-index: 10;
+  display: grid;
+  grid-template-columns: 240px 1fr;
+  height: 100vh;
+  overflow: hidden;
+  color: white !important;
+}
+
+/* Translucent Glass Sidebar */
+[data-theme="ios-glass"] .desktop-sidebar {
+  background: rgba(255, 255, 255, 0.03) !important;
+  backdrop-filter: blur(35px) saturate(180%) !important;
+  -webkit-backdrop-filter: blur(35px) saturate(180%) !important;
+  border-right: 1px solid rgba(255, 255, 255, 0.08) !important;
+  box-shadow: 4px 0 32px rgba(0, 0, 0, 0.25) !important;
+  z-index: 10;
+  padding: 24px 20px;
+}
+
+[data-theme="ios-glass"] .desktop-brand {
+  font-size: 0.85rem !important;
+  font-weight: 700 !important;
+  letter-spacing: 0.2em !important;
+  text-transform: uppercase !important;
+  color: #fff !important;
+  margin-bottom: 20px;
+  text-align: center;
+  background: linear-gradient(135deg, #fff 40%, rgba(255, 255, 255, 0.5));
+  -webkit-background-clip: text;
+  -webkit-text-fill-color: transparent;
+}
+
+/* Sidebar navigation buttons styled like elegant glass pills */
+[data-theme="ios-glass"] .desktop-nav button {
+  color: rgba(255, 255, 255, 0.65) !important;
+  border: 1px solid transparent !important;
+  border-radius: 12px !important;
+  padding: 10px 16px !important;
+  font-size: 0.85rem !important;
+  font-weight: 500 !important;
+  letter-spacing: 0.04em !important;
+  text-transform: uppercase !important;
+  transition: all 0.25s cubic-bezier(0.4, 0, 0.2, 1) !important;
+  background: transparent !important;
+  text-align: left !important;
+}
+
+[data-theme="ios-glass"] .desktop-nav button:hover {
+  color: white !important;
+  background: rgba(255, 255, 255, 0.05) !important;
+  border-color: rgba(255, 255, 255, 0.1) !important;
+  transform: translateX(2px);
+}
+
+[data-theme="ios-glass"] .desktop-nav button.active {
+  color: white !important;
+  background: rgba(255, 255, 255, 0.12) !important;
+  border: 1px solid rgba(255, 255, 255, 0.2) !important;
+  border-top-color: rgba(255, 255, 255, 0.35) !important;
+  box-shadow: 0 4px 16px rgba(0, 0, 0, 0.25), inset 0 1px 0 rgba(255, 255, 255, 0.2) !important;
+}
+
+/* Sidebar Footer (LAN sync Address) */
+[data-theme="ios-glass"] .desktop-sidebar-footer {
+  background: rgba(255, 255, 255, 0.05) !important;
+  backdrop-filter: blur(12px) !important;
+  border: 1px solid rgba(255, 255, 255, 0.12) !important;
+  border-top-color: rgba(255, 255, 255, 0.22) !important;
+  border-radius: 16px !important;
+  padding: 12px 14px !important;
+  box-shadow: 0 4px 16px rgba(0, 0, 0, 0.15), inset 0 1px 0 rgba(255, 255, 255, 0.15) !important;
+  margin-top: auto;
+  cursor: pointer;
+  transition: all 0.2s ease !important;
+}
+
+[data-theme="ios-glass"] .desktop-sidebar-footer:hover {
+  background: rgba(255, 255, 255, 0.09) !important;
+  border-color: rgba(255, 255, 255, 0.2) !important;
+  transform: translateY(-1px);
+}
+
+/* Dot matrix decor hidden or faded under glass theme */
+[data-theme="ios-glass"] .desktop-dots {
+  opacity: 0.15 !important;
+  margin-bottom: 20px;
+}
+
+/* Main screen and content elements on right */
+[data-theme="ios-glass"] .desktop-main {
+  background: transparent !important;
+  display: flex;
+  flex-direction: column;
+  height: 100vh;
+  overflow: hidden;
+  z-index: 10;
+}
+
+[data-theme="ios-glass"] .desktop-topbar {
+  background: transparent !important;
+  border-bottom: 1px solid rgba(255, 255, 255, 0.08) !important;
+  padding: 20px 30px 16px !important;
+  display: flex;
+  justify-content: space-between;
+  align-items: center;
+}
+
+[data-theme="ios-glass"] .desktop-topbar-title h1 {
+  color: white !important;
+  font-weight: 700 !important;
+  font-size: 1.5rem !important;
+  letter-spacing: -0.5px !important;
+}
+
+[data-theme="ios-glass"] .desktop-topbar-sync-meta {
+  color: rgba(255, 255, 255, 0.45) !important;
+  font-size: 11px !important;
+  margin-top: 2px;
+}
+
+/* Main Display Pane transformed into a floating glass card */
+[data-theme="ios-glass"] .desktop-content {
+  background: var(--glass-bg) !important;
+  backdrop-filter: var(--glass-blur) !important;
+  -webkit-backdrop-filter: var(--glass-blur) !important;
+  border: 1px solid var(--glass-border) !important;
+  border-top-color: var(--glass-border-top) !important;
+  border-left-color: var(--glass-border-left) !important;
+  box-shadow: var(--glass-shadow) !important;
+  border-radius: 24px !important;
+  padding: 24px 28px !important;
+  margin: 16px 30px 24px !important;
+  flex: 1 !important;
+  min-height: 0 !important;
+  overflow: auto !important;
+  position: relative !important;
+}
+
+[data-theme="ios-glass"] .desktop-content::before {
+  content: '';
+  position: absolute;
+  top: 0; left: 0; right: 0;
+  height: 1px;
+  background: linear-gradient(90deg, transparent, rgba(255, 255, 255, 0.4), transparent);
+  pointer-events: none;
+}
+
+/* ==========================================================================
+   Mobile-Specific Layout Alignment (VaultScreen & Settings)
+   ========================================================================== */
+
+[data-theme="ios-glass"] .glass-mobile-shell {
+  background: linear-gradient(135deg, #070714 0%, #0d1730 30%, #0b1f3b 50%, #170b2a 70%, #070714 100%) !important;
+  min-height: 100vh;
+  position: relative;
+  overflow-x: hidden;
+  color: white;
+}
+
+/* VaultScreen app structure */
+[data-theme="ios-glass"] .glass-mobile-shell .app-shell {
+  background: transparent !important;
+  min-height: 100vh;
+  display: flex;
+  flex-direction: column;
+  position: relative;
+  z-index: 10;
+}
+
+[data-theme="ios-glass"] .glass-mobile-shell .topbar {
+  background: transparent !important;
+  border-bottom: 1px solid rgba(255, 255, 255, 0.08) !important;
+  padding: 16px 20px !important;
+  padding-top: calc(16px + env(safe-area-inset-top)) !important;
+}
+
+[data-theme="ios-glass"] .glass-mobile-shell .topbar h2 {
+  color: white !important;
+  font-weight: 700 !important;
+  font-size: 1.4rem !important;
+  letter-spacing: -0.5px !important;
+}
+
+[data-theme="ios-glass"] .glass-mobile-shell .topbar-meta {
+  color: rgba(255, 255, 255, 0.45) !important;
+  font-size: 11px !important;
+  margin-top: 4px;
+}
+
+[data-theme="ios-glass"] .glass-mobile-shell .main-content {
+  background: transparent !important;
+  padding: 16px 20px 96px !important; /* Space for the floating bottom pill tabbar */
+  display: flex;
+  flex-direction: column;
+  gap: 12px;
+  flex: 1;
+}
+
+/* Empty Vault Mobile View Card */
+[data-theme="ios-glass"] .glass-mobile-shell .vault-home-empty {
+  background: var(--glass-bg) !important;
+  backdrop-filter: var(--glass-blur) !important;
+  -webkit-backdrop-filter: var(--glass-blur) !important;
+  border: 1px solid var(--glass-border) !important;
+  border-top-color: var(--glass-border-top) !important;
+  box-shadow: var(--glass-shadow) !important;
+  border-radius: 22px !important;
+  padding: 40px 24px !important;
+  text-align: center;
+  position: relative;
+}
+
+[data-theme="ios-glass"] .glass-mobile-shell .vault-home-title {
+  color: white !important;
+  font-weight: 700 !important;
+  margin-bottom: 6px;
+}
+
+/* Standard Mobile Tab Bar transformed into floating Glass Pill */
+[data-theme="ios-glass"] .glass-mobile-shell .tab-bar {
+  position: fixed !important;
+  bottom: 18px !important;
+  left: 18px !important;
+  right: 18px !important;
+  height: 64px !important;
+  display: flex !important;
+  justify-content: space-around !important;
+  align-items: center !important;
+  padding: 0 10px !important;
+  z-index: 1000 !important;
+  background: rgba(255, 255, 255, 0.08) !important;
+  backdrop-filter: blur(24px) saturate(180%) !important;
+  -webkit-backdrop-filter: blur(24px) saturate(180%) !important;
+  border: 1px solid rgba(255, 255, 255, 0.16) !important;
+  border-top-color: rgba(255, 255, 255, 0.32) !important;
+  border-radius: 100px !important;
+  box-shadow: 0 10px 40px rgba(0, 0, 0, 0.3), inset 0 1px 0 rgba(255, 255, 255, 0.2) !important;
+}
+
+/* Navigation tabs in the floating pill */
+[data-theme="ios-glass"] .glass-mobile-shell .tab-bar button {
+  background: transparent !important;
+  border: 1px solid transparent !important;
+  color: rgba(255, 255, 255, 0.45) !important;
+  padding: 8px 18px !important;
+  border-radius: 100px !important;
+  font-size: 10px !important;
+  font-weight: 600 !important;
+  text-transform: uppercase !important;
+  letter-spacing: 0.05em !important;
+  cursor: pointer !important;
+  transition: all 0.2s ease !important;
+}
+
+[data-theme="ios-glass"] .glass-mobile-shell .tab-bar button:hover {
+  color: white !important;
+}
+
+[data-theme="ios-glass"] .glass-mobile-shell .tab-bar button.active {
+  background: rgba(255, 255, 255, 0.12) !important;
+  border-color: rgba(255, 255, 255, 0.2) !important;
+  color: white !important;
+  box-shadow: inset 0 1px 0 rgba(255, 255, 255, 0.2) !important;
+}
+
+/* Floating central tab-bar-fab button (Add password button) */
+[data-theme="ios-glass"] .glass-mobile-shell .tab-bar .tab-bar-fab {
+  background: linear-gradient(135deg, #4f8ef7, #3b82f6) !important;
+  color: white !important;
+  width: 44px !important;
+  height: 44px !important;
+  font-size: 20px !important;
+  display: flex !important;
+  align-items: center !important;
+  justify-content: center !important;
+  border-radius: 50% !important;
+  border: none !important;
+  box-shadow: 0 4px 16px rgba(59, 130, 246, 0.45), inset 0 1px 0 rgba(255, 255, 255, 0.25) !important;
+}
+
+[data-theme="ios-glass"] .glass-mobile-shell .tab-bar .tab-bar-fab:hover {
+  transform: scale(1.05);
+}
+
+/* Mobile Toast */
+[data-theme="ios-glass"] .glass-mobile-shell .toast {
+  position: fixed !important;
+  bottom: 96px !important;
+  left: 50% !important;
+  transform: translateX(-50%) !important;
+  background: rgba(0, 0, 0, 0.8) !important;
+  color: white !important;
+  padding: 10px 20px !important;
+  border-radius: 100px !important;
+  z-index: 9999 !important;
+  backdrop-filter: blur(10px) !important;
+  border: 1px solid rgba(255,255,255,0.1) !important;
+  box-shadow: 0 4px 20px rgba(0,0,0,0.3) !important;
+}
+
+
+/* ==========================================================================
+   Skins for Inputs, Controls, Buttons & Scrollbars (Common to both)
+   ========================================================================== */
+
+/* Frosted Form Inputs under Glass Theme */
+[data-theme="ios-glass"] input[type="text"],
+[data-theme="ios-glass"] input[type="password"],
+[data-theme="ios-glass"] input[type="search"],
+[data-theme="ios-glass"] input[type="email"],
+[data-theme="ios-glass"] select,
+[data-theme="ios-glass"] textarea {
+  background: rgba(255, 255, 255, 0.05) !important;
+  border: 1px solid rgba(255, 255, 255, 0.12) !important;
+  border-top-color: rgba(255, 255, 255, 0.22) !important;
+  color: white !important;
+  border-radius: 12px !important;
+  padding: 12px 16px !important;
+  outline: none !important;
+  font-size: 14px !important;
+  transition: all 0.25s ease !important;
+  backdrop-filter: blur(12px) !important;
+  -webkit-backdrop-filter: blur(12px) !important;
+}
+
+[data-theme="ios-glass"] input:focus,
+[data-theme="ios-glass"] select:focus,
+[data-theme="ios-glass"] textarea:focus {
+  background: rgba(255, 255, 255, 0.08) !important;
+  border-color: rgba(79, 142, 247, 0.5) !important;
+  box-shadow: 0 0 14px rgba(79, 142, 247, 0.3), inset 0 1px 0 rgba(255, 255, 255, 0.1) !important;
+}
+
+/* Glass Buttons styling */
+[data-theme="ios-glass"] button.primary {
+  background: linear-gradient(135deg, #4f8ef7, #3b82f6) !important;
+  border: none !important;
+  color: white !important;
+  padding: 10px 20px !important;
+  border-radius: 12px !important;
+  font-weight: 600 !important;
+  letter-spacing: 0.01em !important;
+  cursor: pointer !important;
+  box-shadow: 0 4px 16px rgba(59, 130, 246, 0.35), inset 0 1px 0 rgba(255, 255, 255, 0.2) !important;
+  transition: all 0.2s ease !important;
+}
+
+[data-theme="ios-glass"] button.primary:hover {
+  transform: translateY(-1px) !important;
+  box-shadow: 0 6px 20px rgba(59, 130, 246, 0.45), inset 0 1px 0 rgba(255, 255, 255, 0.3) !important;
+}
+
+[data-theme="ios-glass"] button.ghost {
+  background: rgba(255, 255, 255, 0.05) !important;
+  border: 1px solid rgba(255, 255, 255, 0.12) !important;
+  color: rgba(255, 255, 255, 0.85) !important;
+  padding: 10px 18px !important;
+  border-radius: 12px !important;
+  font-weight: 500 !important;
+  cursor: pointer !important;
+  transition: all 0.2s ease !important;
+  backdrop-filter: blur(8px) !important;
+}
+
+[data-theme="ios-glass"] button.ghost:hover {
+  background: rgba(255, 255, 255, 0.12) !important;
+  border-color: rgba(255, 255, 255, 0.22) !important;
+  color: white !important;
+}
+
+[data-theme="ios-glass"] button.ghost.active {
+  background: rgba(79, 142, 247, 0.25) !important;
+  border-color: rgba(79, 142, 247, 0.45) !important;
+  color: white !important;
+}
+
+/* Vault View components alignment */
+[data-theme="ios-glass"] .desktop-vault-layout {
+  display: flex !important;
+  height: 100% !important;
+  gap: 0 !important;
+}
+
+[data-theme="ios-glass"] .desktop-list-pane {
+  flex: 1 !important;
+  display: flex !important;
+  flex-direction: column !important;
+  height: 100% !important;
+  overflow: hidden !important;
+}
+
+/* Scrollbars overrides */
+[data-theme="ios-glass"] ::-webkit-scrollbar {
+  width: 6px;
+  height: 6px;
+}
+[data-theme="ios-glass"] ::-webkit-scrollbar-track {
+  background: rgba(255, 255, 255, 0.01);
+}
+[data-theme="ios-glass"] ::-webkit-scrollbar-thumb {
+  background: rgba(255, 255, 255, 0.15);
+  border-radius: 100px;
+}
+[data-theme="ios-glass"] ::-webkit-scrollbar-thumb:hover {
+  background: rgba(255, 255, 255, 0.25);
+}
+
+/* Elegant Translucent Filters */
+[data-theme="ios-glass"] .category-filter {
+  display: flex;
+  gap: 6px;
+  padding: 2px;
+  background: rgba(255, 255, 255, 0.05);
+  border-radius: 100px;
+  border: 1px solid rgba(255, 255, 255, 0.08);
+  margin-bottom: 12px;
+  width: fit-content;
+  max-width: 100%;
+  overflow-x: auto;
+}
+
+[data-theme="ios-glass"] .category-filter button,
+[data-theme="ios-glass"] .filter-chip {
+  padding: 6px 16px !important;
+  border-radius: 100px !important;
+  font-size: 12px !important;
+  font-weight: 500 !important;
+  background: transparent !important;
+  border: 1px solid transparent !important;
+  color: rgba(255, 255, 255, 0.6) !important;
+  cursor: pointer !important;
+  transition: all 0.2s ease !important;
+  display: flex !important;
+  align-items: center !important;
+  gap: 6px !important;
+  white-space: nowrap !important;
+}
+
+[data-theme="ios-glass"] .category-filter button:hover,
+[data-theme="ios-glass"] .filter-chip:hover {
+  color: white !important;
+  background: rgba(255, 255, 255, 0.05) !important;
+}
+
+[data-theme="ios-glass"] .category-filter button.active,
+[data-theme="ios-glass"] .filter-chip.active {
+  background: rgba(255, 255, 255, 0.14) !important;
+  border-color: rgba(255, 255, 255, 0.15) !important;
+  color: white !important;
+  box-shadow: 0 2px 10px rgba(0, 0, 0, 0.15), inset 0 1px 0 rgba(255, 255, 255, 0.15) !important;
+}
+
+/* Translucent Frosted Entry list */
+[data-theme="ios-glass"] .entry-list {
+  list-style: none !important;
+  padding: 4px 2px !important;
+  overflow-y: auto !important;
+  flex: 1 !important;
+  min-height: 0 !important;
+  margin: 0 !important;
+  display: flex;
+  flex-direction: column;
+  gap: 10px;
+}
+
+[data-theme="ios-glass"] .entry-card {
+  width: 100% !important;
+  display: flex !important;
+  align-items: center !important;
+  gap: 12px !important;
+  padding: 12px 16px !important;
+  text-align: left !important;
+  background: rgba(255, 255, 255, 0.05) !important;
+  backdrop-filter: blur(10px) !important;
+  -webkit-backdrop-filter: blur(10px) !important;
+  border: 1px solid rgba(255, 255, 255, 0.1) !important;
+  border-top-color: rgba(255, 255, 255, 0.18) !important;
+  border-radius: 14px !important;
+  color: white !important;
+  cursor: pointer !important;
+  box-shadow: 0 4px 12px rgba(0, 0, 0, 0.12), inset 0 1px 0 rgba(255, 255, 255, 0.1) !important;
+  transition: all 0.25s cubic-bezier(0.4, 0, 0.2, 1) !important;
+}
+
+[data-theme="ios-glass"] .entry-card:hover {
+  background: rgba(255, 255, 255, 0.09) !important;
+  border-color: rgba(255, 255, 255, 0.18) !important;
+  transform: translateY(-1px) !important;
+  box-shadow: 0 6px 18px rgba(0, 0, 0, 0.18), inset 0 1px 0 rgba(255, 255, 255, 0.18) !important;
+}
+
+[data-theme="ios-glass"] .entry-card.active {
+  background: rgba(255, 255, 255, 0.14) !important;
+  border-color: rgba(79, 142, 247, 0.45) !important;
+  border-top-color: rgba(79, 142, 247, 0.6) !important;
+  box-shadow: var(--accent-glow), 0 4px 14px rgba(0, 0, 0, 0.2), inset 0 1px 0 rgba(255, 255, 255, 0.2) !important;
+}
+
+[data-theme="ios-glass"] .entry-card-text {
+  flex: 1 !important;
+  display: flex !important;
+  flex-direction: column !important;
+  min-width: 0 !important;
+}
+
+[data-theme="ios-glass"] .entry-card-text strong {
+  font-size: 13px !important;
+  font-weight: 600 !important;
+  color: white !important;
+}
+
+[data-theme="ios-glass"] .entry-card-text .muted {
+  font-size: 11px !important;
+  color: rgba(255, 255, 255, 0.45) !important;
+  margin-top: 1px !important;
+  white-space: nowrap !important;
+  overflow: hidden !important;
+  text-overflow: ellipsis !important;
+}
+
+/* Vault pagination overrides */
+[data-theme="ios-glass"] .vault-pagination {
+  display: flex !important;
+  justify-content: space-between !important;
+  align-items: center !important;
+  padding: 12px 6px 4px !important;
+  margin-top: 8px !important;
+  border-top: 1px solid rgba(255, 255, 255, 0.08) !important;
+  flex-shrink: 0 !important;
+}
+
+[data-theme="ios-glass"] .vault-pagination-meta {
+  font-size: 12px !important;
+  color: rgba(255, 255, 255, 0.7) !important;
+}
+
+/* Settings lists overrides */
+[data-theme="ios-glass"] .settings-group {
+  margin-bottom: 24px !important;
+}
+
+[data-theme="ios-glass"] .settings-title {
+  font-size: 13px !important;
+  font-weight: 600 !important;
+  text-transform: uppercase !important;
+  letter-spacing: 0.08em !important;
+  color: rgba(255, 255, 255, 0.45) !important;
+  margin-bottom: 10px !important;
+}
+
+[data-theme="ios-glass"] .settings-list {
+  background: rgba(255, 255, 255, 0.04) !important;
+  border: 1px solid rgba(255, 255, 255, 0.08) !important;
+  border-radius: 16px !important;
+  overflow: hidden !important;
+  padding: 0 !important;
+  margin: 0 !important;
+}
+
+[data-theme="ios-glass"] .settings-item {
+  display: flex !important;
+  justify-content: space-between !important;
+  align-items: center !important;
+  padding: 14px 18px !important;
+  border-bottom: 1px solid rgba(255, 255, 255, 0.06) !important;
+  color: white !important;
+}
+
+[data-theme="ios-glass"] .settings-item:last-child {
+  border-bottom: none !important;
+}
+
+/* Specular Sheen Animation preset */
+@keyframes sheen {
+  0% { transform: translateX(-100%) rotate(45deg); }
+  100% { transform: translateX(300%) rotate(45deg); }
+}
+
+.glass-sheen::after {
+  content: '';
+  position: absolute;
+  top: -50%; left: -50%;
+  width: 30%; height: 200%;
+  background: linear-gradient(90deg, transparent, rgba(255, 255, 255, 0.07), transparent);
+  animation: sheen 7s cubic-bezier(0.4, 0, 0.2, 1) infinite;
+  pointer-events: none;
+}
+
+/* Frosted Modal Overlay */
+[data-theme="ios-glass"] .modal-overlay,
+[data-theme="ios-glass"] .dialog-overlay {
+  background: rgba(0, 0, 0, 0.6) !important;
+  backdrop-filter: blur(16px) !important;
+  -webkit-backdrop-filter: blur(16px) !important;
+  z-index: 2000 !important;
+}
+
+[data-theme="ios-glass"] .modal-content,
+[data-theme="ios-glass"] .dialog-content {
+  background: rgba(255, 255, 255, 0.08) !important;
+  backdrop-filter: var(--glass-blur) !important;
+  -webkit-backdrop-filter: var(--glass-blur) !important;
+  border: 1px solid var(--glass-border) !important;
+  border-top-color: var(--glass-border-top) !important;
+  border-left-color: var(--glass-border-left) !important;
+  box-shadow: var(--glass-shadow) !important;
+  border-radius: 24px !important;
+  color: white !important;
+  padding: 24px 28px !important;
+  z-index: 2001 !important;
+}
+
+[data-theme="ios-glass"] .modal-title,
+[data-theme="ios-glass"] .dialog-title {
+  color: white !important;
+  font-weight: 700 !important;
+  font-size: 18px !important;
+  letter-spacing: -0.5px !important;
+  margin-bottom: 16px !important;
+}
+
+[data-theme="ios-glass"] .person-avatar {
+  border: 1px solid rgba(255, 255, 255, 0.2) !important;
+  box-shadow: 0 2px 8px rgba(0, 0, 0, 0.2) !important;
+}
+
+/* setup / auth centering helper styles */
+.glass-layout {
+  min-height: 100vh;
+  position: relative;
+  overflow: hidden;
+  padding: 0;
+  display: flex;
+  flex-direction: column;
+}
+
+.glass-auth-container {
+  display: grid;
+  place-items: center;
+  min-height: 100vh;
+  position: relative;
+  z-index: 10;
+}
+
+.glass-auth-card {
+  width: min(680px, 92vw) !important;
+  max-height: 92vh !important;
+  overflow: visible !important;
+  padding: 2.25rem 2rem !important;
+}
+
+.glass-loading {
+  position: relative;
+  z-index: 10;
+  display: grid;
+  place-items: center;
+  min-height: 100vh;
+  color: white;
+  font-size: 1.2rem;
+}
+
+/* iOS Glass theme split card styling overrides */
+[data-theme="ios-glass"] .unlock-divider {
+  background: rgba(255, 255, 255, 0.12) !important;
+  box-shadow: inset 1px 0 0 rgba(255, 255, 255, 0.05);
+}
+
+[data-theme="ios-glass"] .vault-logo-badge {
+  filter: drop-shadow(0 8px 24px rgba(79, 142, 247, 0.45));
+}

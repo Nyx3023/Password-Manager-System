@@ -1,4 +1,4 @@
-﻿import { FormEvent, useEffect, useState, type ReactNode } from "react";
+import { FormEvent, useEffect, useState, type ReactNode } from "react";
 import { autofillSupported, VaultAutofill } from "@/shared/vaultAutofill";
 import type { ImportMode, Person, PersonCategoryId } from "@/shared/types";
 import {
@@ -17,6 +17,8 @@ import {
   DesktopLanPanel,
   type DesktopLanPanelProps,
 } from "@/desktop/DesktopLanPanel";
+import { DesktopExtensionPanel } from "@/desktop/DesktopExtensionPanel";
+import { useTheme } from "@/hooks/useTheme";
 
 type SettingsModal =
   | "people"
@@ -115,6 +117,7 @@ function SettingsRow({
 export function SettingsScreen(props: SettingsScreenProps) {
   const [modal, setModal] = useState<SettingsModal>(null);
   const [autofillEnabled, setAutofillEnabled] = useState(false);
+  const { theme, setTheme } = useTheme();
 
   useEffect(() => {
     if (!autofillSupported()) return;
@@ -198,6 +201,12 @@ export function SettingsScreen(props: SettingsScreenProps) {
         </div>
       )}
 
+      {props.desktopLan && (
+        <div className="settings-span-full">
+          <DesktopExtensionPanel />
+        </div>
+      )}
+
       <div className="settings-grid">
       <section className="settings-group">
         <SettingsRow
@@ -236,6 +245,23 @@ export function SettingsScreen(props: SettingsScreenProps) {
             onClick={() => props.onOpenLanSync?.()}
           />
         )}
+      </section>
+
+      <section className="settings-group">
+        <SettingsRow
+          label="Appearance"
+          hint="App theme style"
+          trailing={
+            <select
+              value={theme}
+              onChange={(e) => setTheme(e.target.value as "nothing" | "ios-glass")}
+              style={{ width: "auto", padding: "8px 12px", minWidth: 140 }}
+            >
+              <option value="nothing">Nothing OS</option>
+              <option value="ios-glass">iOS Glass</option>
+            </select>
+          }
+        />
       </section>
 
       {autofillSupported() && (
