@@ -2,6 +2,7 @@ const http = require("node:http");
 const os = require("node:os");
 const crypto = require("node:crypto");
 const dgram = require("node:dgram");
+const net = require("node:net");
 
 const DEFAULT_PORT = 9847;
 
@@ -133,7 +134,27 @@ function createLanServer({ app, vaultPaths, port = DEFAULT_PORT, onVaultWritten 
   }
 
   async function handleRequest(req, res) {
-    res.setHeader("Access-Control-Allow-Origin", "*");
+    const origin = req.headers.origin;
+    if (origin) {
+      try {
+        const url = new URL(origin);
+        const isLocalhost = url.hostname === "localhost" || url.hostname === "127.0.0.1";
+        const isCapacitor = url.protocol === "capacitor:" || url.protocol === "ionic:";
+        const isPrivateHttp =
+          url.protocol === "http:" &&
+          net.isIP(url.hostname) &&
+          (url.hostname.startsWith("192.168.") ||
+            url.hostname.startsWith("10.") ||
+            /^172\.(1[6-9]|2[0-9]|3[0-1])\./.test(url.hostname));
+
+        if (isLocalhost || isCapacitor || isPrivateHttp) {
+          res.setHeader("Access-Control-Allow-Origin", origin);
+        }
+      } catch (err) {
+        // invalid origin, ignore
+      }
+    }
+
     res.setHeader("Access-Control-Allow-Headers", "Content-Type, If-Match");
     res.setHeader("Access-Control-Allow-Methods", "GET, PUT, OPTIONS");
 
