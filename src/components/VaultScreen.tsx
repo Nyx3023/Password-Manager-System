@@ -1,4 +1,5 @@
 import { useMemo, useState } from "react";
+import { DEFAULT_CATEGORY_ID } from "@/shared/catalog";
 import { entryDisplayTitle, normalizeEntry } from "@/shared/entryUtils";
 import { colorForId } from "@/shared/people";
 import type {
@@ -102,7 +103,7 @@ export function VaultScreen(props: VaultScreenProps) {
   const categoryCounts = useMemo(() => {
     const counts: Record<string, number> = {};
     for (const entry of props.entries) {
-      const id = normalizeEntry(entry).categoryId;
+      const id = entry.categoryId ?? DEFAULT_CATEGORY_ID;
       counts[id] = (counts[id] ?? 0) + 1;
     }
     return counts;
