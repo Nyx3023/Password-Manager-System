@@ -5,6 +5,19 @@ export type PersonCategoryId =
   | "work"
   | "other";
 
+export interface AddEntryProps {
+  people: Person[];
+  onCancel: () => void;
+  onAddPerson: (
+    name: string,
+    category: PersonCategoryId,
+    emoji?: string,
+  ) => Promise<Person | null>;
+  onSave: (
+    data: Omit<VaultEntry, "id" | "createdAt" | "updatedAt">,
+  ) => Promise<void>;
+}
+
 export interface Person {
   id: string;
   name: string;

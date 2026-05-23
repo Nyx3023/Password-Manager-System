@@ -7,28 +7,15 @@ import {
 } from "@/shared/catalog";
 import { suggestedTitle } from "@/shared/entryUtils";
 import { colorForId, groupPeopleByCategory } from "@/shared/people";
-import type { Person, PersonCategoryId, VaultEntry } from "@/shared/types";
+import type { AddEntryProps } from "@/shared/types";
 import { PersonAvatar, ServiceIcon } from "@/components/ServiceIcon";
 import { PasswordGeneratorPanel } from "@/components/PasswordGeneratorPanel";
-
-interface DesktopAddEntryFormProps {
-  people: Person[];
-  onCancel: () => void;
-  onAddPerson: (
-    name: string,
-    category: PersonCategoryId,
-    emoji?: string,
-  ) => Promise<Person | null>;
-  onSave: (
-    data: Omit<VaultEntry, "id" | "createdAt" | "updatedAt">,
-  ) => Promise<void>;
-}
 
 export function DesktopAddEntryForm({
   people,
   onCancel,
   onSave,
-}: DesktopAddEntryFormProps) {
+}: AddEntryProps) {
   const [personId, setPersonId] = useState("");
   const [categoryId, setCategoryId] = useState(DEFAULT_CATEGORY_ID);
   const [subcategoryId, setSubcategoryId] = useState(DEFAULT_SUBCATEGORY_ID);

@@ -5,32 +5,19 @@ import {
   getSubcategory,
 } from "@/shared/catalog";
 import { suggestedTitle } from "@/shared/entryUtils";
-import type { Person, PersonCategoryId, VaultEntry } from "@/shared/types";
+import type { AddEntryProps } from "@/shared/types";
 import { StepCategory } from "./StepCategory";
 import { StepCredentials, type CredentialsState } from "./StepCredentials";
 import { StepPerson } from "./StepPerson";
 import { StepService } from "./StepService";
 import { WizardShell } from "./WizardShell";
 
-interface AddEntryWizardProps {
-  people: Person[];
-  onCancel: () => void;
-  onAddPerson: (
-    name: string,
-    category: PersonCategoryId,
-    emoji?: string,
-  ) => Promise<Person | null>;
-  onSave: (
-    data: Omit<VaultEntry, "id" | "createdAt" | "updatedAt">,
-  ) => Promise<void>;
-}
-
 export function AddEntryWizard({
   people,
   onCancel,
   onAddPerson,
   onSave,
-}: AddEntryWizardProps) {
+}: AddEntryProps) {
   const [step, setStep] = useState(1);
   const [personId, setPersonId] = useState<string | null>(null);
   const [categoryId, setCategoryId] = useState<string | null>(null);
