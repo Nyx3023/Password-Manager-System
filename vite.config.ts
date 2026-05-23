@@ -21,4 +21,9 @@ export default defineConfig(({ mode }) => ({
     port: 5173,
     strictPort: true,
   },
+  test: {
+    environment: "node",
+    globals: true,
+    setupFiles: ["./src/setupTests.ts"],
+  },
 }));

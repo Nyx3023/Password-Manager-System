@@ -4,6 +4,7 @@ android/
 .capacitor/
 *.log
 .DS_Store
+coverage/
 .idea/
 local.properties
 dist-electron/
