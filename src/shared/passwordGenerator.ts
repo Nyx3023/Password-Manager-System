@@ -46,14 +46,26 @@ export function generatePassword(options: GeneratorOptions): string {
   return chars.join("");
 }
 
+function getRandomInt(max: number): number {
+  if (max <= 1) return 0;
+  const maxValid = 4294967296 - (4294967296 % max);
+  const arr = new Uint32Array(1);
+  while (true) {
+    crypto.getRandomValues(arr);
+    if (arr[0]! < maxValid) {
+      return arr[0]! % max;
+    }
+  }
+}
+
 function pick(charset: string): string {
-  const index = crypto.getRandomValues(new Uint32Array(1))[0] % charset.length;
+  const index = getRandomInt(charset.length);
   return charset[index]!;
 }
 
 function shuffle<T>(items: T[]): void {
   for (let i = items.length - 1; i > 0; i--) {
-    const j = crypto.getRandomValues(new Uint32Array(1))[0] % (i + 1);
+    const j = getRandomInt(i + 1);
     [items[i], items[j]] = [items[j]!, items[i]!];
   }
 }
@@ -61,7 +73,7 @@ function shuffle<T>(items: T[]): void {
 function randomDigits(count: number): string {
   let out = "";
   for (let i = 0; i < count; i++) {
-    out += DIGITS[crypto.getRandomValues(new Uint32Array(1))[0]! % DIGITS.length]!;
+    out += DIGITS[getRandomInt(DIGITS.length)]!;
   }
   return out;
 }
