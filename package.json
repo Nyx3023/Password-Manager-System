@@ -17,8 +17,8 @@
     "cap:add": "npx cap add android",
     "cap:open": "npx cap open android",
     "preview": "vite preview",
-    "icons:download": "node scripts/download-icons.mjs"
-
+    "icons:download": "node scripts/download-icons.mjs",
+    "test": "vitest run"
   },
   "dependencies": {
     "@capacitor/android": "^7.2.0",
@@ -27,22 +27,26 @@
     "@capacitor/share": "^7.0.1",
     "@capawesome/capacitor-file-picker": "^7.2.0",
     "@capgo/capacitor-native-biometric": "^7.1.0",
-    "vault-autofill": "file:plugins/vault-autofill",
-    "vault-lan-http": "file:plugins/vault-lan-http",
     "hash-wasm": "^4.12.0",
     "react": "^19.1.0",
-    "react-dom": "^19.1.0"
+    "react-dom": "^19.1.0",
+    "vault-autofill": "file:plugins/vault-autofill",
+    "vault-lan-http": "file:plugins/vault-lan-http"
   },
   "devDependencies": {
-    "electron": "^35.0.0",
     "@capacitor/cli": "^7.2.0",
     "@types/react": "^19.1.2",
     "@types/react-dom": "^19.1.2",
     "@vitejs/plugin-react": "^4.4.1",
+    "@vitest/coverage-v8": "^4.1.7",
+    "electron": "^35.0.0",
     "typescript": "^5.8.3",
-    "vite": "^6.3.5"
+    "vite": "^6.3.5",
+    "vitest": "^4.1.7"
   },
   "capacitor": {
-    "platforms": ["android"]
+    "platforms": [
+      "android"
+    ]
   }
 }
