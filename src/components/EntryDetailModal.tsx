@@ -1,4 +1,3 @@
-import { useState } from "react";
 import {
   entryDisplayTitle,
   entrySubtitle,
@@ -9,6 +8,7 @@ import { colorForId } from "@/shared/people";
 import type { Person, VaultEntry } from "@/shared/types";
 import { Modal } from "./Modal";
 import { PersonAvatar, ServiceIcon } from "./ServiceIcon";
+import { DetailRow } from "./DetailRow";
 
 interface EntryDetailModalProps {
   entry: VaultEntry | null;
@@ -17,50 +17,6 @@ interface EntryDetailModalProps {
   onEdit: () => void;
   onDelete: () => void;
   onCopy: (label: string, value: string) => void;
-}
-
-function DetailRow({
-  label,
-  value,
-  secret,
-  onCopy,
-}: {
-  label: string;
-  value: string;
-  secret?: boolean;
-  onCopy: (label: string, value: string) => void;
-}) {
-  const [visible, setVisible] = useState(false);
-  if (!value) return null;
-
-  return (
-    <div className="detail-row">
-      <span className="detail-row-label">{label}</span>
-      <div className="detail-row-value">
-        <span className={secret && !visible ? "detail-secret" : ""}>
-          {secret && !visible ? "\u2022\u2022\u2022\u2022\u2022\u2022\u2022\u2022" : value}
-        </span>
-        <div className="detail-row-actions">
-          {secret && (
-            <button
-              type="button"
-              className="ghost small"
-              onClick={() => setVisible((v) => !v)}
-            >
-              {visible ? "Hide" : "Show"}
-            </button>
-          )}
-          <button
-            type="button"
-            className="ghost small"
-            onClick={() => onCopy(label, value)}
-          >
-            Copy
-          </button>
-        </div>
-      </div>
-    </div>
-  );
 }
 
 export function EntryDetailModal({

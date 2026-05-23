@@ -148,6 +148,7 @@ export function DesktopVaultView(props: DesktopVaultViewProps) {
                 props.onMessage("Deleted.");
               }
             }}
+            onCopy={props.onCopy}
           />
         </div>
       </Modal>

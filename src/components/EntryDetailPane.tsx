@@ -1,5 +1,3 @@
-import { useState } from "react";
-import { useClipboard } from "@/hooks/useClipboard";
 import {
   entryDisplayTitle,
   entrySubtitle,
@@ -9,65 +7,14 @@ import {
 import { colorForId } from "@/shared/people";
 import type { Person, VaultEntry } from "@/shared/types";
 import { PersonAvatar, ServiceIcon } from "./ServiceIcon";
+import { DetailRow } from "./DetailRow";
 
 interface EntryDetailPaneProps {
   entry: VaultEntry | null;
   people: Person[];
   onEdit: () => void;
   onDelete: () => void;
-}
-
-function DetailRow({
-  label,
-  value,
-  secret,
-}: {
-  label: string;
-  value: string;
-  secret?: boolean;
-}) {
-  const [visible, setVisible] = useState(false);
-  const [copied, setCopied] = useState(false);
-  const { copy } = useClipboard();
-
-  const handleCopy = async () => {
-    if (!value) return;
-    await copy(value);
-    setCopied(true);
-    setTimeout(() => setCopied(false), 2000);
-  };
-
-  if (!value) return null;
-
-  return (
-    <div className="detail-row">
-      <span className="detail-row-label">{label}</span>
-      <div className="detail-row-value">
-        <span className={secret && !visible ? "detail-secret" : ""}>
-          {secret && !visible ? "********" : value}
-        </span>
-        <div className="detail-row-actions">
-          {secret && (
-            <button
-              type="button"
-              className="ghost small"
-              onClick={() => setVisible((v) => !v)}
-            >
-              {visible ? "Hide" : "Show"}
-            </button>
-          )}
-          <button
-            type="button"
-            className="ghost small"
-            onClick={() => void handleCopy()}
-            style={copied ? { color: "var(--accent)" } : undefined}
-          >
-            {copied ? "Copied!" : "Copy"}
-          </button>
-        </div>
-      </div>
-    </div>
-  );
+  onCopy: (label: string, value: string) => void | Promise<void>;
 }
 
 export function EntryDetailPane({
@@ -75,6 +22,7 @@ export function EntryDetailPane({
   people,
   onEdit,
   onDelete,
+  onCopy,
 }: EntryDetailPaneProps) {
   if (!entry) {
     return (
@@ -115,11 +63,11 @@ export function EntryDetailPane({
 
       <div className="desktop-detail-grid">
         <div className="detail-col" style={{ display: "flex", flexDirection: "column", gap: "20px" }}>
-          <DetailRow label="Username" value={e.username} />
-          <DetailRow label="Password" value={e.password} secret />
+          <DetailRow label="Username" value={e.username} onCopy={onCopy} />
+          <DetailRow label="Password" value={e.password} secret onCopy={onCopy} />
         </div>
         <div className="detail-col" style={{ display: "flex", flexDirection: "column", gap: "20px" }}>
-          <DetailRow label="URL" value={e.url} />
+          <DetailRow label="URL" value={e.url} onCopy={onCopy} />
           {e.notes && (
             <div className="detail-row">
               <span className="detail-row-label">Notes</span>
