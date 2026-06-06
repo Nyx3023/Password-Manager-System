@@ -32,6 +32,9 @@ import type {
   VaultEntry,
 } from "@/shared/types";
 
+/** Default auto-lock timeout: 5 minutes of inactivity. */
+export const DEFAULT_AUTO_LOCK_MS = 5 * 60 * 1000;
+
 export function useVault() {
   const service = useMemo(() => new VaultService(), []);
   const [ready, setReady] = useState(false);
@@ -303,8 +306,21 @@ export function useVault() {
         sync();
         void syncWithPc();
         return true;
-      } catch {
-        setError(null);
+      } catch (e) {
+        // Surface rate-limit and MPIN-wipe errors from the service.
+        const msg = e instanceof Error ? e.message : "";
+        if (
+          msg.includes("Too many") ||
+          msg.includes("MPIN disabled") ||
+          msg.includes("not set")
+        ) {
+          setError(msg);
+          if (msg.includes("MPIN disabled")) {
+            setMpinEnabled(false);
+          }
+        } else {
+          setError(null);
+        }
         return false;
       } finally {
         setBusy(false);
@@ -587,6 +603,23 @@ export function useVault() {
     [service, sync],
   );
 
+  const verifyBackupPassword = useCallback(
+    async (content: string, password: string) => {
+      setError(null);
+      setBusy(true);
+      try {
+        await service.verifyVaultBackup(content, password);
+        return true;
+      } catch (e) {
+        setError(e instanceof Error ? e.message : "Invalid password or corrupted backup.");
+        return false;
+      } finally {
+        setBusy(false);
+      }
+    },
+    [service]
+  );
+
   // ============================================================
   // Chrome CSV
   // ============================================================
@@ -752,5 +785,6 @@ export function useVault() {
     setError,
     refreshMeta,
     resetApp,
+    verifyBackupPassword,
   };
 }

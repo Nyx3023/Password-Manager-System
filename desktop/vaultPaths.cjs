@@ -6,6 +6,39 @@ const VAULT_BACKUP_FILE = "vault.enc.json.bak";
 const VAULT_TEMP_FILE = "vault.enc.json.tmp";
 const PREFS_FILE = "app.prefs.json";
 
+/** Allowlisted file names that may be read/written via IPC. */
+const SAFE_FILES = new Set([
+  VAULT_FILE,
+  VAULT_BACKUP_FILE,
+  VAULT_TEMP_FILE,
+  PREFS_FILE,
+  "lan-pairing.json",
+  "ipc-session.token",
+  "mpin-device.json",
+  "unlock-attempts.json",
+]);
+
+/**
+ * Validate a filename from the renderer. Rejects path traversal,
+ * hidden files, and anything not on the allowlist.
+ * Throws on invalid input.
+ */
+function sanitizeFileName(name) {
+  if (typeof name !== "string" || !name) {
+    throw new Error("Invalid file name.");
+  }
+  if (name.includes("..") || name.includes("/") || name.includes("\\") || name.includes("\0")) {
+    throw new Error("Invalid file name: path traversal detected.");
+  }
+  if (name.startsWith(".")) {
+    throw new Error("Invalid file name: hidden files not allowed.");
+  }
+  if (!SAFE_FILES.has(name)) {
+    throw new Error(`Invalid file name: "${name}" is not allowed.`);
+  }
+  return name;
+}
+
 function getDataDir(app) {
   return app.getPath("userData");
 }
@@ -102,4 +135,5 @@ module.exports = {
   loadVault,
   saveVault,
   isValidVaultEnvelope,
+  sanitizeFileName,
 };

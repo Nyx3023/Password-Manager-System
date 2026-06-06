@@ -2,6 +2,7 @@ const http = require("node:http");
 const os = require("node:os");
 const crypto = require("node:crypto");
 const dgram = require("node:dgram");
+const lanAuth = require("./lanAuth.cjs");
 
 const DEFAULT_PORT = 9847;
 
@@ -101,9 +102,18 @@ function createLanServer({ app, vaultPaths, port = DEFAULT_PORT, onVaultWritten 
   let server = null;
   let lastSyncAt = null;
 
+  // Pairing state.
+  let activePairingCode = null;
+  let pairingTimeout = null;
   let udpSocket = null;
   let udpInterval = null;
   const UDP_PORT = 9846;
+  const PAIRING_TIMEOUT_MS = 120_000; // 2 minutes
+
+  /** Load the stored pairing token (persisted across restarts). */
+  function getStoredToken() {
+    return lanAuth.loadPairingToken(app);
+  }
 
   function status() {
     const ip = getLanIpv4();
@@ -124,6 +134,8 @@ function createLanServer({ app, vaultPaths, port = DEFAULT_PORT, onVaultWritten 
       addresses,
       vaultEtag,
       lastSyncAt,
+      paired: !!getStoredToken(),
+      pairingActive: !!activePairingCode,
     };
   }
 
@@ -132,11 +144,24 @@ function createLanServer({ app, vaultPaths, port = DEFAULT_PORT, onVaultWritten 
     res.end(JSON.stringify(obj));
   }
 
-  async function handleRequest(req, res) {
-    res.setHeader("Access-Control-Allow-Origin", "*");
-    res.setHeader("Access-Control-Allow-Headers", "Content-Type, If-Match");
-    res.setHeader("Access-Control-Allow-Methods", "GET, PUT, OPTIONS");
+  /** Return 401 if the request is not authenticated. Returns true if OK. */
+  function requireAuth(req, res) {
+    const storedToken = getStoredToken();
+    if (!storedToken) {
+      sendJson(res, 401, { error: "No device is paired. Start pairing on the desktop app." });
+      return false;
+    }
+    if (!lanAuth.validateBearerToken(req, storedToken)) {
+      sendJson(res, 401, { error: "Unauthorized. Re-pair your device." });
+      return false;
+    }
+    return true;
+  }
 
+  async function handleRequest(req, res) {
+    // Security: no wildcard CORS. Only allow explicit CORS for OPTIONS preflight.
+    // The phone uses a native HTTP client, not a browser, so CORS is not needed.
+    // This blocks browser-based CSRF attacks entirely.
     if (req.method === "OPTIONS") {
       res.writeHead(204);
       res.end();
@@ -145,12 +170,49 @@ function createLanServer({ app, vaultPaths, port = DEFAULT_PORT, onVaultWritten 
 
     const pathname = (req.url || "").split("?")[0];
 
+    // === Pairing endpoint (unauthenticated, but code-protected) ===
+    if (pathname === "/api/pair" && req.method === "POST") {
+      if (!activePairingCode) {
+        sendJson(res, 403, { error: "Pairing is not active. Start pairing on the desktop app." });
+        return;
+      }
+      let body;
+      try {
+        body = await readRequestBody(req);
+      } catch {
+        sendJson(res, 400, { error: "Bad request." });
+        return;
+      }
+      let code;
+      try {
+        code = (JSON.parse(body)).code;
+      } catch {
+        sendJson(res, 400, { error: "Invalid JSON." });
+        return;
+      }
+      if (typeof code !== "string" || code.toUpperCase().trim() !== activePairingCode) {
+        sendJson(res, 403, { error: "Incorrect pairing code." });
+        return;
+      }
+      // Pairing successful — derive and store the token.
+      const token = lanAuth.deriveTokenFromCode(activePairingCode);
+      lanAuth.savePairingToken(app, token);
+      // Stop pairing mode.
+      stopPairing();
+      sendJson(res, 200, { ok: true, token });
+      return;
+    }
+
+    // === Status endpoint (authenticated) ===
     if (pathname === "/api/status" && req.method === "GET") {
+      if (!requireAuth(req, res)) return;
       sendJson(res, 200, status());
       return;
     }
 
+    // === Vault GET (authenticated) ===
     if (pathname === "/api/vault" && req.method === "GET") {
+      if (!requireAuth(req, res)) return;
       const raw = vaultPaths.loadVault(app);
       if (!raw || !vaultPaths.isValidVaultEnvelope(raw)) {
         sendJson(res, 404, { error: "No vault on this PC." });
@@ -165,7 +227,9 @@ function createLanServer({ app, vaultPaths, port = DEFAULT_PORT, onVaultWritten 
       return;
     }
 
+    // === Vault PUT (authenticated) ===
     if (pathname === "/api/vault" && req.method === "PUT") {
+      if (!requireAuth(req, res)) return;
       let body;
       try {
         body = await readRequestBody(req);
@@ -263,14 +327,43 @@ function createLanServer({ app, vaultPaths, port = DEFAULT_PORT, onVaultWritten 
       s.listen(port, "0.0.0.0", () => {
         s.removeListener("error", fail);
         server = s;
-        try {
-          startUdpBeacon();
-        } catch (e) {
-          console.error("Failed to start UDP beacon", e);
-        }
         resolve(status());
       });
     });
+  }
+
+  // === Pairing mode (controls UDP beacon) ===
+
+  function startPairing() {
+    // Generate a new code each time.
+    activePairingCode = lanAuth.generatePairingCode();
+
+    // Auto-stop after timeout.
+    if (pairingTimeout) clearTimeout(pairingTimeout);
+    pairingTimeout = setTimeout(() => stopPairing(), PAIRING_TIMEOUT_MS);
+
+    // Start UDP beacon only during pairing.
+    startUdpBeacon();
+
+    return activePairingCode;
+  }
+
+  function stopPairing() {
+    activePairingCode = null;
+    if (pairingTimeout) {
+      clearTimeout(pairingTimeout);
+      pairingTimeout = null;
+    }
+    stopUdpBeacon();
+  }
+
+  function getPairingCode() {
+    return activePairingCode;
+  }
+
+  function unpair() {
+    lanAuth.deletePairingToken(app);
+    stopPairing();
   }
 
   function startUdpBeacon() {
@@ -294,11 +387,13 @@ function createLanServer({ app, vaultPaths, port = DEFAULT_PORT, onVaultWritten 
   }
 
   function sendBeacon() {
-    if (!udpSocket) return;
+    if (!udpSocket || !activePairingCode) return;
     try {
       const message = JSON.stringify({
         type: "pms-discovery",
-        port: port
+        port: port,
+        // Include pairing code in beacon so phone can auto-pair.
+        code: activePairingCode,
       });
       const bytes = Buffer.from(message);
       udpSocket.send(bytes, 0, bytes.length, UDP_PORT, "255.255.255.255", (err) => {
@@ -328,7 +423,7 @@ function createLanServer({ app, vaultPaths, port = DEFAULT_PORT, onVaultWritten 
 
   function stop() {
     return new Promise((resolve) => {
-      stopUdpBeacon();
+      stopPairing();
       if (!server) {
         resolve(status());
         return;
@@ -345,6 +440,10 @@ function createLanServer({ app, vaultPaths, port = DEFAULT_PORT, onVaultWritten 
     start,
     stop,
     status,
+    startPairing,
+    stopPairing,
+    getPairingCode,
+    unpair,
     DEFAULT_PORT,
   };
 }

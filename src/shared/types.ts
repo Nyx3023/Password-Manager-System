@@ -57,8 +57,6 @@ export interface EncryptedVaultFile {
   cipher: "aes-256-gcm";
   /** Master password wrap (always present). */
   master: KeyWrap;
-  /** 8-digit MPIN wrap (optional). */
-  mpin?: KeyWrap;
   iv: string;
   ciphertext: string;
 }

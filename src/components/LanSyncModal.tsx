@@ -1,9 +1,11 @@
-﻿import { useCallback, useEffect, useRef, useState } from "react";
+import { useCallback, useEffect, useRef, useState } from "react";
 import {
   connectToPc,
   isLanPaired,
   loadLanPrefs,
+  loadLanToken,
   markLanPaired,
+  pairWithPc,
   parseLanEndpoint,
   type PcConnection,
   validateLanEndpoint,
@@ -29,16 +31,18 @@ interface LanSyncModalProps {
 
 export function LanSyncModal(props: LanSyncModalProps) {
   const [connection, setConnection] = useState<PcConnection | null>(null);
-  const [discoveredPc, setDiscoveredPc] = useState<{ ip: string; port: number } | null>(
+  const [discoveredPc, setDiscoveredPc] = useState<{ ip: string; port: number; code?: string } | null>(
     null,
   );
   const [manualOpen, setManualOpen] = useState(false);
   const [manualHost, setManualHost] = useState("");
   const [manualPort, setManualPort] = useState("9847");
+  const [pairingCode, setPairingCode] = useState("");
+  const [needsPairing, setNeedsPairing] = useState(false);
   const [scanning, setScanning] = useState(false);
   const [statusText, setStatusText] = useState<string | null>(null);
   const [error, setError] = useState<string | null>(null);
-  const [phase, setPhase] = useState<"idle" | "connect" | "pull" | "push">("idle");
+  const [phase, setPhase] = useState<"idle" | "connect" | "pair" | "pull" | "push">("idle");
   const [progressLabel, setProgressLabel] = useState("");
   const visualTimer = useRef<ReturnType<typeof setTimeout> | null>(null);
   const connectAttempted = useRef(false);
@@ -66,7 +70,39 @@ export function LanSyncModal(props: LanSyncModalProps) {
     setScanning(false);
     setStatusText(`Connected to ${conn.status.address}`);
     setError(null);
+    setNeedsPairing(false);
   }, []);
+
+  const runPair = useCallback(
+    async (host: string, port: number, code: string) => {
+      setError(null);
+      setPhase("pair");
+      setVisual("syncing");
+      setProgressLabel("Pairing with PC...");
+
+      try {
+        const result = await pairWithPc(host, port, code);
+        if (!result.ok) {
+          setError(result.message);
+          setVisual("error", 3500);
+          return;
+        }
+        // Pairing succeeded — now connect.
+        const conn = await connectToPc(host, port);
+        applyConnection(conn);
+        setVisual("idle");
+        props.onMessage("Paired successfully!");
+      } catch (e) {
+        const msg = e instanceof Error ? formatLanError(e.message) : "Pairing failed.";
+        setError(msg);
+        setVisual("error", 3500);
+      } finally {
+        setPhase("idle");
+        setProgressLabel("");
+      }
+    },
+    [applyConnection, setVisual, props.onMessage],
+  );
 
   const runConnect = useCallback(
     async (host: string, port: number) => {
@@ -74,6 +110,16 @@ export function LanSyncModal(props: LanSyncModalProps) {
       if (validation) {
         setError(validation);
         setVisual("error", 3500);
+        return;
+      }
+
+      // If we don't have a token, show pairing UI.
+      if (!loadLanToken()) {
+        setNeedsPairing(true);
+        setManualHost(host);
+        setManualPort(String(port));
+        setManualOpen(true);
+        setScanning(false);
         return;
       }
 
@@ -89,6 +135,10 @@ export function LanSyncModal(props: LanSyncModalProps) {
       } catch (e) {
         const msg =
           e instanceof Error ? formatLanError(e.message) : "Could not connect.";
+        if (msg.includes("Authentication failed") || msg.includes("Re-pair")) {
+          setNeedsPairing(true);
+          setManualOpen(true);
+        }
         setError(msg);
         setStatusText(null);
         setConnection(null);
@@ -107,6 +157,8 @@ export function LanSyncModal(props: LanSyncModalProps) {
       setScanning(false);
       setDiscoveredPc(null);
       setManualOpen(false);
+      setNeedsPairing(false);
+      setPairingCode("");
       return;
     }
 
@@ -142,6 +194,10 @@ export function LanSyncModal(props: LanSyncModalProps) {
       return;
     }
     connectAttempted.current = true;
+    // If the beacon includes a pairing code, auto-fill it.
+    if (discoveredPc.code) {
+      setPairingCode(discoveredPc.code);
+    }
     void runConnect(discoveredPc.ip, discoveredPc.port);
   }, [props.open, discoveredPc, connection, runConnect]);
 
@@ -159,7 +215,11 @@ export function LanSyncModal(props: LanSyncModalProps) {
 
   const handleManualConnect = () => {
     const { host, port } = parseLanEndpoint(manualHost, manualPort);
-    void runConnect(host, port);
+    if (needsPairing && pairingCode.trim()) {
+      void runPair(host, port, pairingCode.trim());
+    } else {
+      void runConnect(host, port);
+    }
   };
 
   const handlePull = async () => {
@@ -233,27 +293,30 @@ export function LanSyncModal(props: LanSyncModalProps) {
     >
       <div className="lan-sync-panel lan-sync-panel--compact">
         <p className="muted small lan-sync-hint lan-sync-hint--compact">
-          Same Wi-Fi as the PC. We scan for your desktop automatically.
+          Same Wi-Fi as the PC. Enter the pairing code shown on the desktop app.
         </p>
 
-        {scanning && !connection && phase === "idle" && (
-          <div className="lan-sync-scan">
-            <LoadingIndicator variant="compact" label="Scanning for PC..." />
+        {scanning && !connection && phase === "idle" && !discoveredPc && (
+          <div className="lan-sync-scan live-scan">
+            <div className="radar-pulse"></div>
+            <LoadingIndicator variant="compact" label="Searching for nearby PC..." />
           </div>
         )}
 
-        {discoveredPc && !connection && phase !== "connect" && (
-          <button
-            type="button"
-            className="lan-sync-detected ghost block"
-            disabled={busy}
-            onClick={() => void runConnect(discoveredPc.ip, discoveredPc.port)}
-          >
-            <span className="label-mono">PC DETECTED</span>
-            <span>
-              {discoveredPc.ip}:{discoveredPc.port}
-            </span>
-          </button>
+        {discoveredPc && !connection && phase !== "connect" && !needsPairing && (
+          <div className="lan-sync-discovered-card">
+            <p className="label-mono center-text" style={{ color: 'var(--success)' }}>
+              <span className="live-dot" aria-hidden></span> PC DETECTED
+            </p>
+            <button
+              type="button"
+              className="primary block lan-sync-detected-btn"
+              disabled={busy}
+              onClick={() => void runConnect(discoveredPc.ip, discoveredPc.port)}
+            >
+              Connect to {discoveredPc.ip}:{discoveredPc.port}
+            </button>
+          </div>
         )}
 
         {statusText && !busy && (
@@ -280,12 +343,14 @@ export function LanSyncModal(props: LanSyncModalProps) {
         ) : (
           <div className="lan-sync-manual">
             <div className="lan-sync-manual-head">
-              <span className="label-mono">MANUAL</span>
+              <span className="label-mono">
+                {needsPairing ? "PAIR WITH PC" : "MANUAL"}
+              </span>
               <button
                 type="button"
                 className="ghost small"
                 disabled={busy}
-                onClick={() => setManualOpen(false)}
+                onClick={() => { setManualOpen(false); setNeedsPairing(false); }}
               >
                 Hide
               </button>
@@ -323,13 +388,35 @@ export function LanSyncModal(props: LanSyncModalProps) {
                 />
               </label>
             </div>
+
+            {needsPairing && (
+              <label>
+                Pairing code (from desktop app)
+                <input
+                  className="lan-sync-manual-field"
+                  type="text"
+                  inputMode="text"
+                  value={pairingCode}
+                  onChange={(e) => setPairingCode(e.target.value.toUpperCase())}
+                  placeholder="e.g. A3B7K2"
+                  disabled={inputLocked}
+                  autoComplete="off"
+                  autoCapitalize="characters"
+                  autoCorrect="off"
+                  spellCheck={false}
+                  maxLength={6}
+                  style={{ letterSpacing: "0.2em", fontFamily: "monospace", fontSize: "1.2em", textAlign: "center" }}
+                />
+              </label>
+            )}
+
             <button
               type="button"
-              className="ghost block"
-              disabled={busy}
+              className={needsPairing ? "primary block" : "ghost block"}
+              disabled={busy || (needsPairing && pairingCode.trim().length < 6)}
               onClick={handleManualConnect}
             >
-              Connect
+              {needsPairing ? "Pair & Connect" : "Connect"}
             </button>
           </div>
         )}

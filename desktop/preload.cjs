@@ -14,6 +14,11 @@ contextBridge.exposeInMainWorld("electronAPI", {
   getTrayStatus: () => ipcRenderer.invoke("tray:status"),
   startLanServer: () => ipcRenderer.invoke("lan:start"),
   stopLanServer: () => ipcRenderer.invoke("lan:stop"),
+  // LAN pairing (CRIT-1)
+  startLanPairing: () => ipcRenderer.invoke("lan:start-pairing"),
+  stopLanPairing: () => ipcRenderer.invoke("lan:stop-pairing"),
+  getLanPairingCode: () => ipcRenderer.invoke("lan:get-pairing-code"),
+  unpairLan: () => ipcRenderer.invoke("lan:unpair"),
   openSettings: () => ipcRenderer.send("app:open-settings"),
   openExtensionFolder: () => ipcRenderer.invoke("shell:open-extension-folder"),
   openUrl: (url) => ipcRenderer.invoke("shell:open-url", url),

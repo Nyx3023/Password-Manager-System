@@ -189,6 +189,20 @@ export default function AppMobileGlass() {
                 onRestoreBackup={(content, password) =>
                   vault.importVault(content, password, "replace")
                 }
+                onVerifyBackup={vault.verifyBackupPassword}
+                onCompleteImport={async (content, password, enableBiometrics, mpin) => {
+                  const ok = await vault.importVault(content, password, "replace");
+                  if (ok) {
+                    if (enableBiometrics) {
+                      try { await vault.enableBiometrics(); } catch {}
+                    }
+                    if (mpin && mpin.length === 8) {
+                      await vault.setMpin(mpin, mpin);
+                    }
+                    return true;
+                  }
+                  return false;
+                }}
               />
             </div>
           </div>

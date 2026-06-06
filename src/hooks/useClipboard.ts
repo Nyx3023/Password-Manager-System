@@ -1,6 +1,6 @@
 import { useRef } from "react";
 
-export function useClipboard(clearAfterMs = 30_000) {
+export function useClipboard(clearAfterMs = 10_000) {
   const timer = useRef<number | null>(null);
 
   const copy = async (text: string) => {
@@ -10,6 +10,8 @@ export function useClipboard(clearAfterMs = 30_000) {
       try {
         const current = await navigator.clipboard.readText();
         if (current === text) {
+          // Double-clear defeats clipboard managers that skip empty writes.
+          await navigator.clipboard.writeText(" ");
           await navigator.clipboard.writeText("");
         }
       } catch {
@@ -20,3 +22,4 @@ export function useClipboard(clearAfterMs = 30_000) {
 
   return { copy };
 }
+

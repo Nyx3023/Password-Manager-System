@@ -11,12 +11,25 @@ const fs = require("node:fs");
 const http = require("node:http");
 const path = require("node:path");
 const net = require("node:net");
+const crypto = require("node:crypto");
 const vaultPaths = require("./vaultPaths.cjs");
 const { createLanServer } = require("./lanServer.cjs");
 
 const isDev = !app.isPackaged;
 const VITE_DEV_URL = "http://127.0.0.1:5173/";
 const DIST_INDEX = path.join(__dirname, "..", "dist", "index.html");
+
+// === IPC Session Token (CRIT-2) ===
+const SESSION_TOKEN_FILE = "ipc-session.token";
+
+function generateSessionToken(appInstance) {
+  const token = crypto.randomBytes(32).toString("hex");
+  const tokenPath = path.join(vaultPaths.getDataDir(appInstance), SESSION_TOKEN_FILE);
+  fs.writeFileSync(tokenPath, token, "utf8");
+  return token;
+}
+
+let ipcSessionToken = null;
 
 function viteDevServerUp() {
   return new Promise((resolve) => {
@@ -204,8 +217,11 @@ function requestLock() {
 }
 
 function registerIpc() {
+  // --- Storage IPC (with path sanitization — CRIT-3) ---
+
   ipcMain.handle("storage:read", (_e, name) => {
     try {
+      vaultPaths.sanitizeFileName(name);
       if (name === vaultPaths.VAULT_FILE) {
         return vaultPaths.loadVault(app);
       }
@@ -216,6 +232,11 @@ function registerIpc() {
   });
 
   ipcMain.handle("storage:write", (_e, name, content) => {
+    try {
+      vaultPaths.sanitizeFileName(name);
+    } catch {
+      return false;
+    }
     if (name === vaultPaths.VAULT_FILE) {
       vaultPaths.saveVault(app, content);
     } else {
@@ -225,11 +246,18 @@ function registerIpc() {
   });
 
   ipcMain.handle("storage:delete", (_e, name) => {
+    try {
+      vaultPaths.sanitizeFileName(name);
+    } catch {
+      return false;
+    }
     vaultPaths.deleteFile(app, name);
     return true;
   });
 
   ipcMain.handle("storage:vaultDir", () => vaultPaths.getDataDir(app));
+
+  // --- LAN server IPC ---
 
   ipcMain.handle("tray:status", () => lan.status());
 
@@ -245,6 +273,33 @@ function registerIpc() {
     return st;
   });
 
+  // --- LAN pairing IPC (CRIT-1) ---
+
+  ipcMain.handle("lan:start-pairing", async () => {
+    // Ensure server is running first.
+    if (!lan.status().running) {
+      await lan.start();
+      refreshTray();
+    }
+    const code = lan.startPairing();
+    return { code };
+  });
+
+  ipcMain.handle("lan:stop-pairing", () => {
+    lan.stopPairing();
+  });
+
+  ipcMain.handle("lan:get-pairing-code", () => {
+    return { code: lan.getPairingCode() };
+  });
+
+  ipcMain.handle("lan:unpair", () => {
+    lan.unpair();
+    refreshTray();
+  });
+
+  // --- App events ---
+
   ipcMain.on("app:lock", () => requestLock());
   ipcMain.on("app:open-settings", () => {
     showMainWindow();
@@ -258,7 +313,6 @@ function registerIpc() {
         const payload = Object.assign({ id: data.id }, data.result);
         socket.write(JSON.stringify(payload) + "\n");
       } catch (err) {}
-      // Keep socket open for persistent connections!
       autofillRequests.delete(data.id);
     }
   });
@@ -287,6 +341,14 @@ function startIpcServer() {
       if (dataBuffer.endsWith("\n")) {
         try {
           const req = JSON.parse(dataBuffer.trim());
+
+          // === CRIT-2: Validate session token ===
+          if (!req.token || req.token !== ipcSessionToken) {
+            socket.write(JSON.stringify({ id: req.id, error: "UNAUTHORIZED" }) + "\n");
+            dataBuffer = "";
+            return;
+          }
+
           if (req.type === "REQUEST_AUTOFILL" && req.url) {
             const reqId = req.id || ++autofillIdCounter;
             autofillRequests.set(reqId, socket);
@@ -302,7 +364,7 @@ function startIpcServer() {
         } catch(e) {
           socket.write(JSON.stringify({ error: "INVALID_JSON" }) + "\n");
         }
-        dataBuffer = ""; // Reset buffer after processing
+        dataBuffer = "";
       }
     });
   });
@@ -318,6 +380,7 @@ function startIpcServer() {
 
 app.whenReady().then(() => {
   vaultPaths.ensureDataDir(app);
+  ipcSessionToken = generateSessionToken(app);
   registerIpc();
   startIpcServer();
   createWindow();

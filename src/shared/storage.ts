@@ -41,7 +41,7 @@ async function readDataFile(path: string): Promise<string | null> {
     return window.electronAPI!.readDataFile(path);
   }
   if (!Capacitor.isNativePlatform()) {
-    return localStorage.getItem(path);
+    return sessionStorage.getItem(path);
   }
   try {
     const result = await Filesystem.readFile({
@@ -61,7 +61,7 @@ async function writeDataFile(path: string, content: string): Promise<void> {
     return;
   }
   if (!Capacitor.isNativePlatform()) {
-    localStorage.setItem(path, content);
+    sessionStorage.setItem(path, content);
     return;
   }
   await Filesystem.writeFile({
@@ -78,7 +78,7 @@ async function deleteDataFile(path: string): Promise<void> {
     return;
   }
   if (!Capacitor.isNativePlatform()) {
-    localStorage.removeItem(path);
+    sessionStorage.removeItem(path);
     return;
   }
   try {
@@ -153,10 +153,10 @@ export async function resetAllAppData(): Promise<void> {
   }
 
   if (!Capacitor.isNativePlatform()) {
-    localStorage.removeItem(VAULT_FILE);
-    localStorage.removeItem(VAULT_BACKUP_FILE);
-    localStorage.removeItem(VAULT_TEMP_FILE);
-    localStorage.removeItem(PREFS_FILE);
+    sessionStorage.removeItem(VAULT_FILE);
+    sessionStorage.removeItem(VAULT_BACKUP_FILE);
+    sessionStorage.removeItem(VAULT_TEMP_FILE);
+    sessionStorage.removeItem(PREFS_FILE);
     return;
   }
 

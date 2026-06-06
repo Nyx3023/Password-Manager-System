@@ -26,6 +26,8 @@ interface SetupWizardProps {
   error: string | null;
   onComplete: (data: SetupData) => Promise<boolean>;
   onRestoreBackup: (content: string, password: string) => Promise<boolean>;
+  onVerifyBackup: (content: string, password: string) => Promise<boolean>;
+  onCompleteImport?: (content: string, password: string, enableBiometrics: boolean, mpin: string) => Promise<boolean>;
 }
 
 const STEPS = ["people", "password", "biometric", "mpin", "lan-sync-password"] as const;
@@ -36,6 +38,8 @@ export function SetupWizard({
   error,
   onComplete,
   onRestoreBackup,
+  onVerifyBackup,
+  onCompleteImport,
 }: SetupWizardProps) {
   const [step, setStep] = useState<Step>("people");
   const [people, setPeople] = useState<SetupPerson[]>([]);
@@ -73,6 +77,11 @@ export function SetupWizard({
   };
 
   const startFinish = async () => {
+    if (downloadedVault && onCompleteImport) {
+      await onCompleteImport(downloadedVault, lanSyncPw, bioAvailable && enableBiometrics, mpin);
+      return;
+    }
+
     const data: SetupData = {
       people,
       password,
@@ -351,9 +360,14 @@ export function SetupWizard({
               type="button"
               className="primary block"
               disabled={busy || !lanSyncPw}
-              onClick={() => void onRestoreBackup(downloadedVault!, lanSyncPw)}
+              onClick={async () => {
+                const ok = await onVerifyBackup(downloadedVault!, lanSyncPw);
+                if (ok) {
+                  void goBiometricCheck();
+                }
+              }}
             >
-              {busy ? "Unlocking..." : "Unlock & Finish"}
+              {busy ? "Verifying..." : "Verify & Continue"}
             </button>
             <button
               type="button"
@@ -361,6 +375,7 @@ export function SetupWizard({
               disabled={busy}
               onClick={() => {
                 setDownloadedVault(null);
+                setLanSyncPw("");
                 setStep("people");
               }}
             >

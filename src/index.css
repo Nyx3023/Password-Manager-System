@@ -2334,3 +2334,76 @@ button:disabled {
 .modal--compact .lan-sync-manual {
   touch-action: manipulation;
 }
+
+/* ============================================================
+   Live LAN Pairing Animations
+   ============================================================ */
+.live-scan {
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  gap: 16px;
+  padding: 24px 0;
+}
+
+.radar-pulse {
+  width: 48px;
+  height: 48px;
+  border-radius: 50%;
+  background: rgba(255, 68, 56, 0.2);
+  position: relative;
+}
+
+.radar-pulse::before, .radar-pulse::after {
+  content: "";
+  position: absolute;
+  top: 50%;
+  left: 50%;
+  transform: translate(-50%, -50%);
+  width: 100%;
+  height: 100%;
+  border-radius: 50%;
+  background: rgba(255, 68, 56, 0.4);
+  animation: pulse-ring 2s cubic-bezier(0.215, 0.61, 0.355, 1) infinite;
+}
+
+.radar-pulse::after {
+  animation-delay: 1s;
+}
+
+@keyframes pulse-ring {
+  0% { transform: translate(-50%, -50%) scale(0.5); opacity: 1; }
+  100% { transform: translate(-50%, -50%) scale(2.5); opacity: 0; }
+}
+
+.lan-sync-discovered-card {
+  background: rgba(34, 197, 94, 0.1);
+  border: 1px solid rgba(34, 197, 94, 0.3);
+  border-radius: var(--radius);
+  padding: 16px;
+  display: flex;
+  flex-direction: column;
+  gap: 12px;
+  margin: 12px 0;
+  animation: slide-up-fade 0.4s ease-out forwards;
+}
+
+@keyframes slide-up-fade {
+  from { opacity: 0; transform: translateY(10px); }
+  to { opacity: 1; transform: translateY(0); }
+}
+
+.live-dot {
+  display: inline-block;
+  width: 8px;
+  height: 8px;
+  background-color: var(--success, #22c55e);
+  border-radius: 50%;
+  margin-right: 6px;
+  animation: dot-blink 1.5s infinite;
+}
+
+@keyframes dot-blink {
+  0%, 100% { opacity: 1; }
+  50% { opacity: 0.4; }
+}

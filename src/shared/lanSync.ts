@@ -5,6 +5,7 @@ const PREFS_PORT = "lan_sync_port";
 const PREFS_PAIRED = "lan_sync_paired";
 const PREFS_VAULT_ETAG = "lan_sync_vault_etag";
 const PREFS_LAST_SYNC = "lan_sync_last_at";
+const PREFS_LAN_TOKEN = "lan_sync_token";
 
 export interface LanServerStatus {
   running: boolean;
@@ -12,6 +13,8 @@ export interface LanServerStatus {
   address: string;
   vaultEtag?: string | null;
   lastSyncAt: string | null;
+  paired?: boolean;
+  pairingActive?: boolean;
 }
 
 export interface LanSyncResult {
@@ -69,6 +72,29 @@ function baseUrl(host: string, port: number): string {
   return `http://${host.trim()}:${port}`;
 }
 
+// === Pairing token management ===
+
+export function loadLanToken(): string | null {
+  return localStorage.getItem(PREFS_LAN_TOKEN);
+}
+
+export function saveLanToken(token: string): void {
+  localStorage.setItem(PREFS_LAN_TOKEN, token);
+}
+
+export function clearLanToken(): void {
+  localStorage.removeItem(PREFS_LAN_TOKEN);
+}
+
+/** Build Authorization headers for authenticated LAN requests. */
+function authHeaders(): Record<string, string> {
+  const token = loadLanToken();
+  if (!token) return {};
+  return { Authorization: `Bearer ${token}` };
+}
+
+// === Prefs ===
+
 export function loadLanPrefs(): { host: string; port: number } {
   return {
     host: localStorage.getItem(PREFS_HOST) ?? "",
@@ -91,7 +117,8 @@ export function isLanPaired(): boolean {
   return (
     localStorage.getItem(PREFS_PAIRED) === "1" &&
     !!prefs.host &&
-    /^\d{1,3}(\.\d{1,3}){3}$/.test(prefs.host)
+    /^\d{1,3}(\.\d{1,3}){3}$/.test(prefs.host) &&
+    !!loadLanToken()
   );
 }
 
@@ -126,6 +153,72 @@ export function storeLastSyncAt(iso?: string): string {
   return value;
 }
 
+// === Pairing flow ===
+
+/**
+ * Derive a bearer token from the pairing code (same HMAC as desktop).
+ * Uses Web Crypto for HMAC-SHA256.
+ */
+export async function deriveTokenFromCode(code: string): Promise<string> {
+  const encoder = new TextEncoder();
+  const key = await crypto.subtle.importKey(
+    "raw",
+    encoder.encode("pms-lan-pairing-v1"),
+    { name: "HMAC", hash: "SHA-256" },
+    false,
+    ["sign"],
+  );
+  const sig = await crypto.subtle.sign(
+    "HMAC",
+    key,
+    encoder.encode(code.toUpperCase().trim()),
+  );
+  return Array.from(new Uint8Array(sig))
+    .map((b) => b.toString(16).padStart(2, "0"))
+    .join("");
+}
+
+/**
+ * Pair with a PC by sending the pairing code.
+ * On success, stores the bearer token for future requests.
+ */
+export async function pairWithPc(
+  host: string,
+  port: number,
+  code: string,
+): Promise<{ ok: boolean; message: string }> {
+  const validation = validateLanEndpoint(host, port);
+  if (validation) return { ok: false, message: validation };
+
+  try {
+    const res = await lanHttpRequest({
+      url: `${baseUrl(host, port)}/api/pair`,
+      method: "POST",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify({ code: code.toUpperCase().trim() }),
+    });
+
+    if (res.status === 200) {
+      const body = JSON.parse(res.data) as { token?: string };
+      if (body.token) {
+        saveLanToken(body.token);
+        markLanPaired(host, port);
+        return { ok: true, message: "Paired successfully!" };
+      }
+    }
+
+    const error = parseError(res.data);
+    return { ok: false, message: error || `Pairing failed (${res.status}).` };
+  } catch (e) {
+    return {
+      ok: false,
+      message: e instanceof Error ? e.message : "Could not reach the PC.",
+    };
+  }
+}
+
+// === Authenticated API calls ===
+
 export async function fetchPcStatus(
   host: string,
   port: number,
@@ -138,7 +231,11 @@ export async function fetchPcStatus(
   const res = await lanHttpRequest({
     url: `${baseUrl(host, port)}/api/status`,
     method: "GET",
+    headers: authHeaders(),
   });
+  if (res.status === 401) {
+    throw new Error("Authentication failed. Re-pair your phone with the PC.");
+  }
   if (res.status !== 200) {
     throw new Error(parseError(res.data) || "Could not reach PC.");
   }
@@ -147,7 +244,6 @@ export async function fetchPcStatus(
 
 function isPcLanServerReady(st: LanServerStatus): boolean {
   if (st.running === true) return true;
-  // A 200 from /api/status on our desktop host always includes address (ip:port).
   return typeof st.address === "string" && st.address.includes(":");
 }
 
@@ -193,8 +289,12 @@ export async function pullVaultFromPc(options: {
   const res = await lanHttpRequest({
     url: `${baseUrl(options.host, options.port)}/api/vault`,
     method: "GET",
+    headers: authHeaders(),
   });
 
+  if (res.status === 401) {
+    throw new Error("Authentication failed. Re-pair your phone with the PC.");
+  }
   if (res.status === 404) {
     throw new Error(
       "No vault on the PC yet. Push from the phone first or create a vault on the PC.",
@@ -226,6 +326,7 @@ export async function pushVaultToPc(options: {
 
   const headers: Record<string, string> = {
     "Content-Type": "application/json",
+    ...authHeaders(),
   };
   if (!options.force && lastEtag) {
     headers["If-Match"] = lastEtag;
@@ -238,6 +339,12 @@ export async function pushVaultToPc(options: {
     body: options.vaultJson,
   });
 
+  if (res.status === 401) {
+    return {
+      ok: false,
+      message: "Authentication failed. Re-pair your phone with the PC.",
+    };
+  }
   if (res.status === 409) {
     return {
       ok: false,

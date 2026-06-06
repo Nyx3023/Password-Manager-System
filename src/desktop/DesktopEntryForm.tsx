@@ -1,4 +1,4 @@
-﻿import { useState, useEffect, FormEvent } from "react";
+import { useState, useEffect, FormEvent } from "react";
 import {
   CATEGORIES,
   getSubcategory,
@@ -11,7 +11,8 @@ import type { Person, PersonCategoryId, VaultEntry } from "@/shared/types";
 import { PersonAvatar, ServiceIcon } from "@/components/ServiceIcon";
 import { PasswordGeneratorPanel } from "@/components/PasswordGeneratorPanel";
 
-interface DesktopAddEntryFormProps {
+interface DesktopEntryFormProps {
+  initial?: VaultEntry;
   people: Person[];
   onCancel: () => void;
   onAddPerson: (
@@ -24,21 +25,26 @@ interface DesktopAddEntryFormProps {
   ) => Promise<void>;
 }
 
-export function DesktopAddEntryForm({
+export function DesktopEntryForm({
+  initial,
   people,
   onCancel,
   onSave,
-}: DesktopAddEntryFormProps) {
-  const [personId, setPersonId] = useState("");
-  const [categoryId, setCategoryId] = useState(DEFAULT_CATEGORY_ID);
-  const [subcategoryId, setSubcategoryId] = useState(DEFAULT_SUBCATEGORY_ID);
+}: DesktopEntryFormProps) {
+  const [personId, setPersonId] = useState(initial?.personId ?? "");
+  const [categoryId, setCategoryId] = useState(
+    initial?.categoryId ?? DEFAULT_CATEGORY_ID,
+  );
+  const [subcategoryId, setSubcategoryId] = useState(
+    initial?.subcategoryId ?? DEFAULT_SUBCATEGORY_ID,
+  );
 
   const [form, setForm] = useState({
-    title: "",
-    username: "",
-    password: "",
-    url: "",
-    notes: "",
+    title: initial?.title ?? "",
+    username: initial?.username ?? "",
+    password: initial?.password ?? "",
+    url: initial?.url ?? "",
+    notes: initial?.notes ?? "",
   });
 
   const [showPassword, setShowPassword] = useState(false);
@@ -64,12 +70,12 @@ export function DesktopAddEntryForm({
   const canSave = Boolean(personId && form.password.trim());
 
   useEffect(() => {
-    if (sub?.defaultUrl) {
+    if (!initial && sub?.defaultUrl) {
       setForm((f) => ({ ...f, url: sub.defaultUrl || "" }));
-    } else {
+    } else if (!initial) {
       setForm((f) => ({ ...f, url: "" }));
     }
-  }, [sub]);
+  }, [sub, initial]);
 
   const handleSubmit = async (ev: FormEvent) => {
     ev.preventDefault();
@@ -278,7 +284,7 @@ export function DesktopAddEntryForm({
           Cancel
         </button>
         <button type="submit" className="primary" disabled={saving || !canSave}>
-          {saving ? "Saving..." : "Add entry"}
+          {saving ? "Saving..." : initial ? "Save changes" : "Add entry"}
         </button>
       </footer>
     </form>

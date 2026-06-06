@@ -1,7 +1,27 @@
 const fs = require('node:fs');
+const path = require('node:path');
 const net = require('node:net');
 
 const PIPE_NAME = '\\\\.\\pipe\\passwordmanager-ext-ipc';
+
+// === CRIT-2: Read session token from app data directory ===
+// The data dir path is passed as a command-line argument by the BAT wrapper.
+const dataDir = process.argv[2] || '';
+const tokenPath = dataDir ? path.join(dataDir, 'ipc-session.token') : '';
+let sessionToken = '';
+
+if (tokenPath && fs.existsSync(tokenPath)) {
+  try {
+    sessionToken = fs.readFileSync(tokenPath, 'utf8').trim();
+  } catch {
+    // Token file unreadable — all requests will fail auth.
+  }
+}
+
+if (!sessionToken) {
+  sendMessage({ error: "NO_SESSION_TOKEN", details: "Could not read IPC session token. Is the desktop app running?" });
+  process.exit(1);
+}
 
 function sendMessage(msgObj) {
   const msgStr = JSON.stringify(msgObj);
@@ -44,6 +64,8 @@ process.stdin.on('data', (chunk) => {
       
       try {
         const message = JSON.parse(content);
+        // Inject session token into every IPC message (CRIT-2).
+        message.token = sessionToken;
         client.write(JSON.stringify(message) + "\n");
       } catch(e) {}
     } else {

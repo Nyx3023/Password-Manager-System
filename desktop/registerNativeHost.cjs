@@ -7,8 +7,15 @@ const BAT_PATH = path.join(DIR, 'password-manager-host.bat');
 const CHROME_JSON_PATH = path.join(DIR, 'com.passwordmanager.host.chrome.json');
 const MOZILLA_JSON_PATH = path.join(DIR, 'com.passwordmanager.host.mozilla.json');
 
-// 1. Generate the BAT wrapper required by Windows Native Messaging
-const batContent = `@echo off\n"${process.execPath}" "${path.join(DIR, 'nativeHost.cjs')}"\n`;
+// Determine the app data directory (same as Electron's userData).
+// For packaged apps this is %APPDATA%/Password Manager; for dev it's %APPDATA%/Electron.
+const appDataDir = path.join(
+  process.env.APPDATA || path.join(require('os').homedir(), 'AppData', 'Roaming'),
+  'Password Manager'
+);
+
+// 1. Generate the BAT wrapper — passes the data dir so nativeHost can read the session token.
+const batContent = `@echo off\n"${process.execPath}" "${path.join(DIR, 'nativeHost.cjs')}" "${appDataDir}"\n`;
 fs.writeFileSync(BAT_PATH, batContent);
 console.log(`[INFO] Created wrapper: ${BAT_PATH}`);
 

@@ -746,3 +746,41 @@
 [data-theme="ios-glass"] .vault-logo-badge {
   filter: drop-shadow(0 8px 24px rgba(79, 142, 247, 0.45));
 }
+
+/* Two-column setup layout */
+.desktop-two-column-setup {
+  display: grid;
+  grid-template-columns: 240px 1fr;
+  gap: 32px;
+  align-items: stretch;
+  min-height: 400px;
+}
+
+.desktop-two-column-setup .setup-left-pane {
+  display: flex;
+  flex-direction: column;
+  justify-content: center;
+  align-items: center;
+  padding: 24px 16px;
+  border-right: 1px solid rgba(255, 255, 255, 0.12);
+  text-align: center;
+}
+
+.desktop-two-column-setup .setup-right-pane {
+  display: flex;
+  flex-direction: column;
+  justify-content: center;
+  padding: 16px 0;
+}
+
+@media (max-width: 600px) {
+  .desktop-two-column-setup {
+    grid-template-columns: 1fr;
+    gap: 16px;
+  }
+  .desktop-two-column-setup .setup-left-pane {
+    border-right: none;
+    border-bottom: 1px solid rgba(255, 255, 255, 0.12);
+    padding-bottom: 16px;
+  }
+}

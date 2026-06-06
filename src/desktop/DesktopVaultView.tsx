@@ -2,11 +2,10 @@ import { useMemo, useState } from "react";
 import { entryDisplayTitle, normalizeEntry } from "@/shared/entryUtils";
 import { CategoryFilter } from "@/components/CategoryFilter";
 import { EntryDetailPane } from "@/components/EntryDetailPane";
-import { EntryForm } from "@/components/EntryForm";
 import { EntryList } from "@/components/EntryList";
 import { Modal } from "@/components/Modal";
 import { PersonAvatar } from "@/components/ServiceIcon";
-import { DesktopAddEntryForm } from "./DesktopAddEntryForm";
+import { DesktopEntryForm } from "./DesktopEntryForm";
 import { DesktopDialog } from "./DesktopDialog";
 import { colorForId } from "@/shared/people";
 import type { Person, PersonCategoryId, VaultEntry } from "@/shared/types";
@@ -157,7 +156,7 @@ export function DesktopVaultView(props: DesktopVaultViewProps) {
         open={props.adding}
         onClose={() => props.onAddingChange(false)}
       >
-        <DesktopAddEntryForm
+        <DesktopEntryForm
           people={props.people}
           onCancel={() => props.onAddingChange(false)}
           onAddPerson={props.onAddPerson}
@@ -169,17 +168,17 @@ export function DesktopVaultView(props: DesktopVaultViewProps) {
         />
       </DesktopDialog>
 
-      <Modal
+      <DesktopDialog
         title="Edit password"
         open={editing && !!selected}
         onClose={() => setEditing(false)}
-        wide
       >
         {selected && (
-          <EntryForm
+          <DesktopEntryForm
             initial={selected}
             people={props.people}
             onCancel={() => setEditing(false)}
+            onAddPerson={props.onAddPerson}
             onSave={async (data) => {
               await props.onUpdate(selected.id, data);
               setEditing(false);
@@ -187,7 +186,7 @@ export function DesktopVaultView(props: DesktopVaultViewProps) {
             }}
           />
         )}
-      </Modal>
+      </DesktopDialog>
     </>
   );
 }

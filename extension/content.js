@@ -7,6 +7,16 @@ document.addEventListener("click", (e) => {
 
   const type = target.type.toLowerCase();
   if (type === "password" || type === "text" || type === "email") {
+    // Security: never autofill on non-HTTPS pages.
+    if (window.location.protocol !== "https:") {
+      showPopupMessage("Autofill is only available on HTTPS pages.", true);
+      return;
+    }
+
+    // Security: skip fields that explicitly disable autofill (often registration forms).
+    const ac = (target.autocomplete || "").toLowerCase();
+    if (ac === "off" || ac === "new-password") return;
+
     // Basic heuristic: check if it's likely a login field
     const isLoginField = type === "password" || 
       target.name.toLowerCase().includes("user") || 

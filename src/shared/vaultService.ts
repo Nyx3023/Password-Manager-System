@@ -16,6 +16,14 @@ import { VaultDecryptError } from "./vaultErrors";
 import { loadPrefs, loadVaultFile, savePrefs, saveVaultFile } from "./storage";
 import { normalizePayload } from "./entryUtils";
 import { mergeVaultPayloads } from "./vaultMerge";
+import {
+  deleteMpinWrap,
+  hasMpinOnDevice,
+  loadMpinWrap,
+  MPIN_KDF,
+  saveMpinWrap,
+} from "./mpinStore";
+import { UnlockRateLimiter } from "./rateLimiter";
 import type {
   EncryptedVaultFile,
   ImportMode,
@@ -51,7 +59,9 @@ function parseEncryptedFile(raw: string): EncryptedVaultFile {
   }
 
   if (obj.version === 2 && typeof obj.master === "object") {
-    return obj as unknown as EncryptedVaultFile;
+    // Strip legacy mpin field if present (migrated to device-local storage).
+    const { mpin: _mpin, ...rest } = obj as Record<string, unknown>;
+    return rest as unknown as EncryptedVaultFile;
   }
 
   if (obj.version === 1) {
@@ -120,6 +130,7 @@ export class VaultService {
   private payload: VaultPayload | null = null;
   private vaultKey: Uint8Array | null = null;
   private file: EncryptedVaultFile | null = null;
+  private rateLimiter = new UnlockRateLimiter();
 
   get isUnlocked(): boolean {
     return this.payload !== null && this.vaultKey !== null;
@@ -133,10 +144,6 @@ export class VaultService {
     return this.payload?.people ?? [];
   }
 
-  get hasMpin(): boolean {
-    return !!this.file?.mpin;
-  }
-
   async exists(): Promise<boolean> {
     return (await loadVaultFile()) !== null;
   }
@@ -145,15 +152,9 @@ export class VaultService {
     return loadPrefs();
   }
 
-  /** Check whether the on-disk vault has an MPIN configured. */
+  /** Check whether this device has an MPIN configured. */
   async hasMpinOnDisk(): Promise<boolean> {
-    const raw = await loadVaultFile();
-    if (!raw) return false;
-    try {
-      return !!parseEncryptedFile(raw).mpin;
-    } catch {
-      return false;
-    }
+    return hasMpinOnDevice();
   }
 
   async createVault(masterPassword: string): Promise<void> {
@@ -176,44 +177,81 @@ export class VaultService {
   }
 
   async unlockWithPassword(masterPassword: string): Promise<void> {
+    // Rate-limit check.
+    const check = await this.rateLimiter.checkAllowed("master");
+    if (!check.allowed) {
+      throw new Error(
+        `Too many failed attempts. Try again in ${check.waitSeconds} seconds.`,
+      );
+    }
+
     const raw = await loadVaultFile();
     if (!raw) throw new Error("No vault found on this device.");
 
     const file = parseEncryptedFile(raw);
-    const vaultKey = await unwrapVaultKey(
-      masterPassword,
-      fromBase64(file.master.salt),
-      file.master.wrappedKeyIv,
-      file.master.wrappedKey,
-    );
+    let vaultKey: Uint8Array;
+    try {
+      vaultKey = await unwrapVaultKey(
+        masterPassword,
+        fromBase64(file.master.salt),
+        file.master.wrappedKeyIv,
+        file.master.wrappedKey,
+      );
+    } catch {
+      await this.rateLimiter.recordFailure("master");
+      throw new Error("Incorrect master password.");
+    }
 
     this.vaultKey = vaultKey;
     this.payload = await decryptPayloadFromFile(vaultKey, file);
     this.file = file;
+    await this.rateLimiter.recordSuccess("master");
   }
 
   async unlockWithMpin(mpin: string): Promise<void> {
+    // Rate-limit check.
+    const check = await this.rateLimiter.checkAllowed("mpin");
+    if (!check.allowed) {
+      if (check.mpinWiped) {
+        throw new Error(
+          "MPIN disabled after too many failed attempts. Use your master password, then set a new MPIN in Settings.",
+        );
+      }
+      throw new Error(
+        `Too many failed attempts. Try again in ${check.waitSeconds} seconds.`,
+      );
+    }
+
+    // Load MPIN wrap from device-local storage (not from vault file).
+    const mpinWrap = await loadMpinWrap();
+    if (!mpinWrap) throw new Error("MPIN is not set on this device.");
+
     const raw = await loadVaultFile();
     if (!raw) throw new Error("No vault found on this device.");
-
     const file = parseEncryptedFile(raw);
-    if (!file.mpin) throw new Error("MPIN is not set on this vault.");
 
     let vaultKey: Uint8Array;
     try {
       vaultKey = await unwrapVaultKey(
         mpin,
-        fromBase64(file.mpin.salt),
-        file.mpin.wrappedKeyIv,
-        file.mpin.wrappedKey,
+        fromBase64(mpinWrap.salt),
+        mpinWrap.wrappedKeyIv,
+        mpinWrap.wrappedKey,
       );
     } catch {
+      const wiped = await this.rateLimiter.recordFailure("mpin");
+      if (wiped) {
+        throw new Error(
+          "MPIN disabled after too many failed attempts. Use your master password, then set a new MPIN in Settings.",
+        );
+      }
       throw new Error("Incorrect MPIN.");
     }
 
     this.vaultKey = vaultKey;
     this.payload = await decryptPayloadFromFile(vaultKey, file);
     this.file = file;
+    await this.rateLimiter.recordSuccess("mpin");
   }
 
   async unlockWithVaultKey(
@@ -253,10 +291,6 @@ export class VaultService {
     this.file = null;
   }
 
-  getVaultKey(): Uint8Array | null {
-    return this.vaultKey;
-  }
-
   // ============================================================
   // Biometrics
   // ============================================================
@@ -276,33 +310,27 @@ export class VaultService {
   }
 
   // ============================================================
-  // MPIN
+  // MPIN (device-local storage)
   // ============================================================
   async setMpin(mpin: string): Promise<void> {
     if (!this.vaultKey || !this.file) throw new Error("Vault is locked.");
     if (!/^\d{8}$/.test(mpin)) throw new Error("MPIN must be exactly 8 digits.");
 
+    // Use stronger KDF parameters for MPIN.
     const wrapped = await wrapVaultKey(mpin, this.vaultKey);
-    this.file = {
-      ...this.file,
-      mpin: {
-        salt: toBase64(wrapped.salt),
-        iterations: DEFAULT_KDF.iterations,
-        memorySize: DEFAULT_KDF.memorySize,
-        parallelism: DEFAULT_KDF.parallelism,
-        hashLength: DEFAULT_KDF.hashLength,
-        wrappedKey: wrapped.wrappedKey,
-        wrappedKeyIv: wrapped.wrappedKeyIv,
-      },
-    };
-    await saveVaultFile(JSON.stringify(this.file));
+    await saveMpinWrap({
+      salt: toBase64(wrapped.salt),
+      iterations: MPIN_KDF.iterations,
+      memorySize: MPIN_KDF.memorySize,
+      parallelism: MPIN_KDF.parallelism,
+      hashLength: MPIN_KDF.hashLength,
+      wrappedKey: wrapped.wrappedKey,
+      wrappedKeyIv: wrapped.wrappedKeyIv,
+    });
   }
 
   async removeMpin(): Promise<void> {
-    if (!this.file) throw new Error("Vault is locked.");
-    const { mpin: _mpin, ...rest } = this.file;
-    this.file = rest as EncryptedVaultFile;
-    await saveVaultFile(JSON.stringify(this.file));
+    await deleteMpinWrap();
   }
 
   // ============================================================
@@ -513,6 +541,17 @@ export class VaultService {
     this.requireUnlocked();
     this.payload = mergeVaultPayloads(this.payload, incomingPayload);
     await this.save();
+  }
+
+  async verifyVaultBackup(fileContent: string, masterPassword: string): Promise<void> {
+    const incoming = parseEncryptedFile(fileContent);
+    const vaultKey = await unwrapVaultKey(
+      masterPassword,
+      fromBase64(incoming.master.salt),
+      incoming.master.wrappedKeyIv,
+      incoming.master.wrappedKey,
+    );
+    await decryptPayloadFromFile(vaultKey, incoming);
   }
 
   /**
