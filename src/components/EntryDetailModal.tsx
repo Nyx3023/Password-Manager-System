@@ -1,4 +1,4 @@
-import { useState } from "react";
+import { useState, useMemo } from "react";
 import {
   entryDisplayTitle,
   entrySubtitle,
@@ -17,6 +17,7 @@ interface EntryDetailModalProps {
   onEdit: () => void;
   onDelete: () => void;
   onCopy: (label: string, value: string) => void;
+  entries?: VaultEntry[];
 }
 
 function DetailRow({
@@ -70,7 +71,15 @@ export function EntryDetailModal({
   onEdit,
   onDelete,
   onCopy,
+  entries = [],
 }: EntryDetailModalProps) {
+  const duplicateEntries = useMemo(() => {
+    if (!entry || !entry.password || !entries) return [];
+    return entries.filter(
+      (item) => item.password === entry.password && item.id !== entry.id
+    );
+  }, [entry, entries]);
+
   if (!entry) return null;
 
   const e = normalizeEntry(entry);
@@ -114,6 +123,38 @@ export function EntryDetailModal({
           <div className="detail-row">
             <span className="detail-row-label">Notes</span>
             <p className="detail-notes">{e.notes}</p>
+          </div>
+        )}
+
+        {duplicateEntries.length > 0 && (
+          <div className="duplicate-warning-box" style={{
+            marginTop: "16px",
+            padding: "12px",
+            borderRadius: "8px",
+            background: "rgba(255, 68, 68, 0.1)",
+            border: "1px solid rgba(255, 68, 68, 0.2)",
+            fontSize: "0.82rem",
+            display: "flex",
+            flexDirection: "column",
+            gap: "6px",
+            boxSizing: "border-box",
+            marginBottom: "16px"
+          }}>
+            <span style={{ fontWeight: "600", color: "var(--danger)" }}>
+              ⚠️ Password Reuse Warning
+            </span>
+            <span className="muted" style={{ fontSize: "0.78rem" }}>
+              This password is also used for:{" "}
+              {duplicateEntries.map((item, index) => {
+                const displayTitle = entryDisplayTitle(normalizeEntry(item), people);
+                return (
+                  <span key={item.id} style={{ color: "var(--text)", fontWeight: "500" }}>
+                    {displayTitle}
+                    {index < duplicateEntries.length - 1 ? ", " : ""}
+                  </span>
+                );
+              })}
+            </span>
           </div>
         )}
 

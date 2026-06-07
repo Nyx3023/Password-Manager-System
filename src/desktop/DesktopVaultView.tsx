@@ -4,6 +4,7 @@ import { CategoryFilter } from "@/components/CategoryFilter";
 import { EntryDetailPane } from "@/components/EntryDetailPane";
 import { EntryList } from "@/components/EntryList";
 import { Modal } from "@/components/Modal";
+import { ConfirmModal } from "@/components/ConfirmModal";
 import { PersonAvatar } from "@/components/ServiceIcon";
 import { DesktopEntryForm } from "./DesktopEntryForm";
 import { DesktopDialog } from "./DesktopDialog";
@@ -39,6 +40,8 @@ export function DesktopVaultView(props: DesktopVaultViewProps) {
   const [selected, setSelected] = useState<VaultEntry | null>(null);
   const [editing, setEditing] = useState(false);
   const [listColumns, setListColumns] = useState<number>(3);
+  const [showDeleteConfirm, setShowDeleteConfirm] = useState(false);
+  const [deletingEntryId, setDeletingEntryId] = useState<string | null>(null);
 
   const categoryCounts = useMemo(() => {
     const counts: Record<string, number> = {};
@@ -120,6 +123,7 @@ export function DesktopVaultView(props: DesktopVaultViewProps) {
             selectedId={selected?.id ?? null}
             onSelect={(entry) => setSelected(entry)}
             columns={listColumns}
+            deletingId={deletingEntryId}
           />
         </div>
       </div>
@@ -137,16 +141,9 @@ export function DesktopVaultView(props: DesktopVaultViewProps) {
             onEdit={() => setEditing(true)}
             onDelete={() => {
               if (!selected) return;
-              const label = entryDisplayTitle(
-                normalizeEntry(selected),
-                props.people,
-              );
-              if (confirm(`Delete "${label}"?`)) {
-                void props.onDelete(selected.id);
-                setSelected(null);
-                props.onMessage("Deleted.");
-              }
+              setShowDeleteConfirm(true);
             }}
+            entries={props.entries}
           />
         </div>
       </Modal>
@@ -187,6 +184,30 @@ export function DesktopVaultView(props: DesktopVaultViewProps) {
           />
         )}
       </DesktopDialog>
+
+      <ConfirmModal
+        open={showDeleteConfirm}
+        title="Delete Password"
+        message={selected ? `Delete "${entryDisplayTitle(normalizeEntry(selected), props.people)}"?` : ""}
+        confirmText="Delete"
+        cancelText="Cancel"
+        onConfirm={() => {
+          if (selected) {
+            const idToDelete = selected.id;
+            setShowDeleteConfirm(false);
+            setSelected(null);
+            setDeletingEntryId(idToDelete);
+            setTimeout(() => {
+              void props.onDelete(idToDelete).then(() => {
+                setDeletingEntryId(null);
+                props.onMessage("Deleted.");
+              });
+            }, 600);
+          }
+        }}
+        onCancel={() => setShowDeleteConfirm(false)}
+        danger
+      />
     </>
   );
 }

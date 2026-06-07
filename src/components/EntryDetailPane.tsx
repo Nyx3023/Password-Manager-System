@@ -1,4 +1,4 @@
-import { useState } from "react";
+import { useState, useMemo } from "react";
 import { useClipboard } from "@/hooks/useClipboard";
 import {
   entryDisplayTitle,
@@ -15,6 +15,7 @@ interface EntryDetailPaneProps {
   people: Person[];
   onEdit: () => void;
   onDelete: () => void;
+  entries?: VaultEntry[];
 }
 
 function DetailRow({
@@ -75,7 +76,15 @@ export function EntryDetailPane({
   people,
   onEdit,
   onDelete,
+  entries = [],
 }: EntryDetailPaneProps) {
+  const duplicateEntries = useMemo(() => {
+    if (!entry || !entry.password || !entries) return [];
+    return entries.filter(
+      (item) => item.password === entry.password && item.id !== entry.id
+    );
+  }, [entry, entries]);
+
   if (!entry) {
     return (
       <div className="desktop-detail-empty">
@@ -128,6 +137,38 @@ export function EntryDetailPane({
           )}
         </div>
       </div>
+
+      {duplicateEntries.length > 0 && (
+        <div className="duplicate-warning-box" style={{
+          marginTop: "16px",
+          padding: "12px",
+          borderRadius: "8px",
+          background: "rgba(255, 68, 68, 0.1)",
+          border: "1px solid rgba(255, 68, 68, 0.2)",
+          fontSize: "0.82rem",
+          display: "flex",
+          flexDirection: "column",
+          gap: "6px",
+          boxSizing: "border-box",
+          marginBottom: "16px"
+        }}>
+          <span style={{ fontWeight: "600", color: "var(--danger)" }}>
+            ⚠️ Password Reuse Warning
+          </span>
+          <span className="muted" style={{ fontSize: "0.78rem" }}>
+            This password is also used for:{" "}
+            {duplicateEntries.map((item, index) => {
+              const displayTitle = entryDisplayTitle(normalizeEntry(item), people);
+              return (
+                <span key={item.id} style={{ color: "var(--text)", fontWeight: "500" }}>
+                  {displayTitle}
+                  {index < duplicateEntries.length - 1 ? ", " : ""}
+                </span>
+              );
+            })}
+          </span>
+        </div>
+      )}
 
       <div className="entry-detail-actions" style={{ display: "grid", gridTemplateColumns: "1fr 1fr", gap: "10px" }}>
         <button type="button" className="primary" onClick={onEdit}>

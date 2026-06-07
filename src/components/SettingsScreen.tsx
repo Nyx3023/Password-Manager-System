@@ -7,6 +7,7 @@ import {
 } from "@/shared/transfer";
 import { CsvImporter } from "./CsvImporter";
 import { Modal } from "./Modal";
+import { ConfirmModal } from "./ConfirmModal";
 import { MpinConfirmFlow } from "./MpinConfirmFlow";
 import { PasswordRequirements } from "./PasswordRequirements";
 import { PeopleManager } from "./PeopleManager";
@@ -18,7 +19,7 @@ import {
   type DesktopLanPanelProps,
 } from "@/desktop/DesktopLanPanel";
 import { DesktopExtensionPanel } from "@/desktop/DesktopExtensionPanel";
-import { useTheme } from "@/hooks/useTheme";
+import { useTheme, type ThemeType } from "@/hooks/useTheme";
 
 type SettingsModal =
   | "people"
@@ -131,6 +132,9 @@ export function SettingsScreen(props: SettingsScreenProps) {
   const [importPw, setImportPw] = useState("");
   const [importMode, setImportMode] = useState<ImportMode>("merge");
 
+  const [showResetConfirm, setShowResetConfirm] = useState(false);
+  const [pendingTheme, setPendingTheme] = useState<ThemeType | null>(null);
+
   const closeModal = () => {
     setModal(null);
     setCurrentPw("");
@@ -180,12 +184,14 @@ export function SettingsScreen(props: SettingsScreenProps) {
     }
   };
 
-  const handleReset = async () => {
+  const handleReset = () => {
     if (!props.onResetApp) return;
-    const ok = confirm(
-      "Erase all vault data, people, passwords, and cached icons? This cannot be undone.",
-    );
-    if (!ok) return;
+    setShowResetConfirm(true);
+  };
+
+  const handleResetConfirm = async () => {
+    setShowResetConfirm(false);
+    if (!props.onResetApp) return;
     const done = await props.onResetApp();
     if (done) props.onMessage("App reset. First-time setup will start.");
   };
@@ -254,7 +260,7 @@ export function SettingsScreen(props: SettingsScreenProps) {
           trailing={
             <select
               value={theme}
-              onChange={(e) => setTheme(e.target.value as "nothing" | "ios-glass")}
+              onChange={(e) => setPendingTheme(e.target.value as ThemeType)}
               style={{ width: "auto", padding: "8px 12px", minWidth: 140 }}
             >
               <option value="nothing">Nothing OS</option>
@@ -482,6 +488,35 @@ export function SettingsScreen(props: SettingsScreenProps) {
           onMessage={props.onMessage}
         />
       </Modal>
+
+      <ConfirmModal
+        open={showResetConfirm}
+        title="Reset App"
+        message="Erase all vault data, people, passwords, and cached icons? This cannot be undone."
+        confirmText="Erase All"
+        cancelText="Cancel"
+        onConfirm={() => {
+          void handleResetConfirm();
+        }}
+        onCancel={() => setShowResetConfirm(false)}
+        danger
+      />
+
+      <ConfirmModal
+        open={pendingTheme !== null}
+        title="Restart Required"
+        message={`Theme set to ${pendingTheme === "ios-glass" ? "iOS Glass" : "Nothing OS"}.\nThe app must be restarted to apply this completely new layout.\n\nRestart now?`}
+        confirmText="Restart Now"
+        cancelText="Cancel"
+        onConfirm={() => {
+          if (pendingTheme) {
+            setTheme(pendingTheme, true);
+          }
+        }}
+        onCancel={() => {
+          setPendingTheme(null);
+        }}
+      />
 
     </div>
   );

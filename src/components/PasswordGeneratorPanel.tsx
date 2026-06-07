@@ -22,7 +22,8 @@ function userTokenPreview(userLabel: string): string {
   const raw = userLabel.trim();
   const local = raw.includes("@") ? raw.split("@")[0]! : raw;
   const letters = local.replace(/[^a-zA-Z0-9]/g, "");
-  return (letters || "user").toLowerCase();
+  const token = letters || "User";
+  return token.charAt(0).toUpperCase() + token.slice(1).toLowerCase();
 }
 
 export function PasswordGeneratorPanel({
@@ -83,7 +84,7 @@ export function PasswordGeneratorPanel({
 
       {mode === "website" ? (
         <p className="muted small generator-hint">
-          Template: <code>WEBSITE_user.######</code>
+          Template: <code>WEBSITE_User.######</code>
           <br />
           Example: <code>{siteExample}_{userExample}.123456</code>
         </p>

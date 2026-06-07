@@ -21,6 +21,7 @@ interface EntryListProps {
   selectedId: string | null;
   onSelect: (entry: VaultEntry) => void;
   columns?: number;
+  deletingId?: string | null;
 }
 
 export function EntryList({
@@ -32,9 +33,21 @@ export function EntryList({
   selectedId,
   onSelect,
   columns,
+  deletingId,
 }: EntryListProps) {
   const [page, setPage] = useState(1);
   const normalized = query.trim().toLowerCase();
+
+  const passwordCounts = useMemo(() => {
+    const counts: Record<string, number> = {};
+    for (const entry of entries) {
+      const p = entry.password;
+      if (p) {
+        counts[p] = (counts[p] ?? 0) + 1;
+      }
+    }
+    return counts;
+  }, [entries]);
 
   const filtered = useMemo(() => {
     return entries.filter((entry) => {
@@ -83,8 +96,13 @@ export function EntryList({
         {pageItems.map((entry) => {
           const e = normalizeEntry(entry);
           const person = findPerson(people, e);
+          const isDuplicate = entry.password && passwordCounts[entry.password] > 1;
           return (
-            <li key={entry.id} style={columns ? { marginBottom: 0 } : undefined}>
+            <li
+              key={entry.id}
+              className={deletingId === entry.id ? "is-deleting" : ""}
+              style={columns ? { marginBottom: 0 } : undefined}
+            >
               <button
                 type="button"
                 className={`entry-card${selectedId === entry.id ? " active" : ""}`}
@@ -96,7 +114,18 @@ export function EntryList({
                   size="md"
                 />
                 <div className="entry-card-text">
-                  <strong>{entryDisplayTitle(e, people)}</strong>
+                  <div style={{ display: "flex", alignItems: "center", gap: "6px" }}>
+                    <strong>{entryDisplayTitle(e, people)}</strong>
+                    {isDuplicate && (
+                      <span className="warning-icon" title="Duplicate password used elsewhere">
+                        <svg viewBox="0 0 24 24" width="14" height="14" stroke="currentColor" strokeWidth="2.5" fill="none" strokeLinecap="round" strokeLinejoin="round">
+                          <path d="M10.29 3.86L1.82 18a2 2 0 0 0 1.71 3h16.94a2 2 0 0 0 1.71-3L13.71 3.86a2 2 0 0 0-3.42 0z"></path>
+                          <line x1="12" y1="9" x2="12" y2="13"></line>
+                          <line x1="12" y1="17" x2="12.01" y2="17"></line>
+                        </svg>
+                      </span>
+                    )}
+                  </div>
                   <span className="muted">{entrySubtitle(e)}</span>
                 </div>
                 {person && (

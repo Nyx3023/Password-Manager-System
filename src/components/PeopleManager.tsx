@@ -7,6 +7,7 @@ import {
 import type { Person, PersonCategoryId } from "@/shared/types";
 import { AddPersonForm } from "./AddPersonForm";
 import { Modal } from "./Modal";
+import { ConfirmModal } from "./ConfirmModal";
 import { PersonAvatar } from "./ServiceIcon";
 
 interface PeopleManagerProps {
@@ -37,6 +38,8 @@ export function PeopleManager({
   const [editingId, setEditingId] = useState<string | null>(null);
   const [editName, setEditName] = useState("");
   const [editCategory, setEditCategory] = useState<PersonCategoryId>("self");
+  const [deletingPerson, setDeletingPerson] = useState<Person | null>(null);
+  const [animatingPersonId, setAnimatingPersonId] = useState<string | null>(null);
 
   const groups = groupPeopleByCategory(people);
 
@@ -53,17 +56,26 @@ export function PeopleManager({
     onMessage("Person updated.");
   };
 
-  const handleDelete = async (person: Person) => {
-    const ok = confirm(
-      `Delete "${person.name}"? All passwords saved under this name will also be deleted.`,
-    );
-    if (!ok) return;
-    const result = await onDelete(person.id);
-    onMessage(
-      result.entriesRemoved
-        ? `Deleted ${person.name} and ${result.entriesRemoved} linked entries.`
-        : `Deleted ${person.name}.`,
-    );
+  const handleDeleteClick = (person: Person) => {
+    setDeletingPerson(person);
+  };
+
+  const handleDeleteConfirm = async () => {
+    if (!deletingPerson) return;
+    const person = deletingPerson;
+    setDeletingPerson(null);
+    setAnimatingPersonId(person.id);
+    
+    setTimeout(() => {
+      void onDelete(person.id).then((result) => {
+        setAnimatingPersonId(null);
+        onMessage(
+          result.entriesRemoved
+            ? `Deleted ${person.name} and ${result.entriesRemoved} linked entries.`
+            : `Deleted ${person.name}.`,
+        );
+      });
+    }, 600);
   };
 
   return (
@@ -94,7 +106,7 @@ export function PeopleManager({
             </h4>
             <ul className="people-list">
               {group.people.map((person) => (
-                <li key={person.id} className="person-row">
+                <li key={person.id} className={`person-row${animatingPersonId === person.id ? " is-deleting" : ""}`}>
                   {editingId === person.id ? (
                     <div className="stack person-edit">
                       <input
@@ -151,7 +163,7 @@ export function PeopleManager({
                         <button
                           type="button"
                           className="ghost small danger"
-                          onClick={() => void handleDelete(person)}
+                          onClick={() => handleDeleteClick(person)}
                         >
                           Delete
                         </button>
@@ -181,6 +193,19 @@ export function PeopleManager({
           }}
         />
       </Modal>
+
+      <ConfirmModal
+        open={deletingPerson !== null}
+        title="Delete Person"
+        message={deletingPerson ? `Delete "${deletingPerson.name}"? All passwords saved under this name will also be deleted.` : ""}
+        confirmText="Delete"
+        cancelText="Cancel"
+        onConfirm={() => {
+          void handleDeleteConfirm();
+        }}
+        onCancel={() => setDeletingPerson(null)}
+        danger
+      />
     </section>
   );
 }

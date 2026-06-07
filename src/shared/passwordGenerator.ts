@@ -85,8 +85,9 @@ function siteToken(websiteLabel: string): string {
 function userToken(userLabel: string): string {
   const raw = userLabel.trim();
   const local = raw.includes("@") ? raw.split("@")[0]! : raw;
-  const letters = local.replace(/[^a-zA-Z0-9]/g, "");
-  return (letters || "user").toLowerCase();
+  const parts = local.split(/[^a-zA-Z0-9]+/).filter(Boolean);
+  if (parts.length === 0) return "User";
+  return parts.map(p => p.charAt(0).toUpperCase() + p.slice(1).toLowerCase()).join("");
 }
 
 /**

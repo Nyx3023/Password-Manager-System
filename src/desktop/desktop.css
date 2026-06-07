@@ -11,13 +11,15 @@
 .desktop-auth-card {
   width: min(680px, 92vw);
   max-height: 92vh;
-  overflow: visible;
+  overflow: hidden;
   padding: 2.25rem 2rem;
   background: var(--panel);
   backdrop-filter: var(--panel-blur);
   -webkit-backdrop-filter: var(--panel-blur);
   border: 1px solid var(--border);
   border-radius: var(--radius);
+  display: flex;
+  flex-direction: column;
 }
 
 /* PC Split Layout for UnlockScreen */

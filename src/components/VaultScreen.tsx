@@ -11,6 +11,7 @@ import { CategoryFilter } from "./CategoryFilter";
 import { EntryDetailModal } from "./EntryDetailModal";
 import { EntryForm } from "./EntryForm";
 import { Modal } from "./Modal";
+import { ConfirmModal } from "./ConfirmModal";
 import { EntryList } from "./EntryList";
 import { PersonAvatar } from "./ServiceIcon";
 import { LanSyncModal } from "./LanSyncModal";
@@ -94,6 +95,8 @@ export function VaultScreen(props: VaultScreenProps) {
   const [editing, setEditing] = useState(false);
   const [lanSyncOpen, setLanSyncOpen] = useState(false);
   const [modalSyncVisual, setModalSyncVisual] = useState<SyncIconState>("idle");
+  const [showDeleteConfirm, setShowDeleteConfirm] = useState(false);
+  const [deletingEntryId, setDeletingEntryId] = useState<string | null>(null);
   const syncVisual = props.syncVisual ?? modalSyncVisual;
   const setSyncVisual = props.onSyncVisual ?? setModalSyncVisual;
 
@@ -265,6 +268,7 @@ export function VaultScreen(props: VaultScreenProps) {
               personFilter={personFilter}
               selectedId={selected?.id ?? null}
               onSelect={(entry) => setSelected(entry)}
+              deletingId={deletingEntryId}
             />
 
             <EntryDetailModal
@@ -274,16 +278,10 @@ export function VaultScreen(props: VaultScreenProps) {
               onEdit={() => setEditing(true)}
               onDelete={() => {
                 if (!selected) return;
-                const label = entryDisplayTitle(
-                  normalizeEntry(selected),
-                  props.people,
-                );
-                if (confirm(`Delete "${label}"?`)) {
-                  void props.onDelete(selected.id);
-                  setSelected(null);
-                }
+                setShowDeleteConfirm(true);
               }}
               onCopy={props.onCopy}
+              entries={props.entries}
             />
           </>
         )}
@@ -352,6 +350,29 @@ export function VaultScreen(props: VaultScreenProps) {
           </button>
         </div>
       </nav>
+
+      <ConfirmModal
+        open={showDeleteConfirm}
+        title="Delete Password"
+        message={selected ? `Delete "${entryDisplayTitle(normalizeEntry(selected), props.people)}"?` : ""}
+        confirmText="Delete"
+        cancelText="Cancel"
+        onConfirm={() => {
+          if (selected) {
+            const idToDelete = selected.id;
+            setShowDeleteConfirm(false);
+            setSelected(null);
+            setDeletingEntryId(idToDelete);
+            setTimeout(() => {
+              void props.onDelete(idToDelete).then(() => {
+                setDeletingEntryId(null);
+              });
+            }, 600);
+          }
+        }}
+        onCancel={() => setShowDeleteConfirm(false)}
+        danger
+      />
     </div>
   );
 }

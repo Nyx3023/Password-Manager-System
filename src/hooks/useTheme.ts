@@ -12,11 +12,10 @@ export function useTheme() {
     document.documentElement.dataset.theme = theme;
   }, [theme]);
 
-  const setTheme = (newTheme: ThemeType) => {
+  const setTheme = (newTheme: ThemeType, forceReload = false) => {
     if (newTheme === theme) return;
     localStorage.setItem("app-theme", newTheme);
-    const ok = window.confirm(`Theme set to ${newTheme === "ios-glass" ? "iOS Glass" : "Nothing OS"}.\nThe app must be restarted to apply this completely new layout.\n\nRestart now?`);
-    if (ok) {
+    if (forceReload) {
       window.location.reload();
     }
   };

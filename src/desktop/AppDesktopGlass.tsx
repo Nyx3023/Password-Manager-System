@@ -189,44 +189,29 @@ export default function AppDesktopGlass() {
         <div className="glass-auth-container">
           <div className="glass glass-auth-card">
             {!vault.hasVault ? (
-              <div className="desktop-two-column-setup">
-                <div className="setup-left-pane">
-                  <div className="vault-logo-badge" style={{ fontSize: "2.5rem" }}>🔐</div>
-                  <p className="setup-brand" style={{ marginTop: "16px", fontWeight: "bold" }}>PASSWORD MANAGER</p>
-                  <div className="dot-matrix small" aria-hidden style={{ marginTop: "12px" }}>
-                    {Array.from({ length: 12 }).map((_, i) => (
-                      <span key={i} className={i % 5 === 0 ? "dot dot--accent" : "dot"} />
-                    ))}
-                  </div>
-                  <p className="setup-sub center-text" style={{ fontSize: "10px", opacity: 0.5, marginTop: "16px", textTransform: "uppercase", letterSpacing: "0.08em" }}>
-                    Secure Offline Vault
-                  </p>
-                </div>
-                <div className="setup-right-pane">
-                  <SetupWizard
-                    busy={vault.busy}
-                    error={vault.error}
-                    onComplete={vault.completeSetup}
-                    onRestoreBackup={(content, password) =>
-                      vault.importVault(content, password, "replace")
+              <SetupWizard
+                layout="desktop"
+                busy={vault.busy}
+                error={vault.error}
+                onComplete={vault.completeSetup}
+                onRestoreBackup={(content, password) =>
+                  vault.importVault(content, password, "replace")
+                }
+                onVerifyBackup={vault.verifyBackupPassword}
+                onCompleteImport={async (content, password, enableBiometrics, mpin) => {
+                  const ok = await vault.importVault(content, password, "replace");
+                  if (ok) {
+                    if (enableBiometrics) {
+                      try { await vault.enableBiometrics(); } catch {}
                     }
-                    onVerifyBackup={vault.verifyBackupPassword}
-                    onCompleteImport={async (content, password, enableBiometrics, mpin) => {
-                      const ok = await vault.importVault(content, password, "replace");
-                      if (ok) {
-                        if (enableBiometrics) {
-                          try { await vault.enableBiometrics(); } catch {}
-                        }
-                        if (mpin && mpin.length === 8) {
-                          await vault.setMpin(mpin, mpin);
-                        }
-                        return true;
-                      }
-                      return false;
-                    }}
-                  />
-                </div>
-              </div>
+                    if (mpin && mpin.length === 8) {
+                      await vault.setMpin(mpin, mpin);
+                    }
+                    return true;
+                  }
+                  return false;
+                }}
+              />
             ) : (
               <UnlockScreen
                 layout="desktop"

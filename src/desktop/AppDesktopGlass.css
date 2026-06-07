@@ -267,10 +267,10 @@
 
 [data-theme="ios-glass"] .glass-mobile-shell .main-content {
   background: transparent !important;
-  padding: 16px 20px 96px !important; /* Space for the floating bottom pill tabbar */
+  padding: 16px 20px 110px !important; /* Increased space for the floating bottom pill tabbar */
   display: flex;
   flex-direction: column;
-  gap: 12px;
+  gap: 16px;
   flex: 1;
 }
 
@@ -295,16 +295,12 @@
 }
 
 /* Standard Mobile Tab Bar transformed into floating Glass Pill */
-[data-theme="ios-glass"] .glass-mobile-shell .tab-bar {
+[data-theme="ios-glass"] .glass-mobile-shell .bottom-nav {
   position: fixed !important;
   bottom: 18px !important;
   left: 18px !important;
   right: 18px !important;
   height: 64px !important;
-  display: flex !important;
-  justify-content: space-around !important;
-  align-items: center !important;
-  padding: 0 10px !important;
   z-index: 1000 !important;
   background: rgba(255, 255, 255, 0.08) !important;
   backdrop-filter: blur(24px) saturate(180%) !important;
@@ -313,10 +309,21 @@
   border-top-color: rgba(255, 255, 255, 0.32) !important;
   border-radius: 100px !important;
   box-shadow: 0 10px 40px rgba(0, 0, 0, 0.3), inset 0 1px 0 rgba(255, 255, 255, 0.2) !important;
+  padding-bottom: 0 !important;
+  border-bottom: 1px solid rgba(255, 255, 255, 0.16) !important;
+}
+
+[data-theme="ios-glass"] .glass-mobile-shell .bottom-nav-inner {
+  display: flex !important;
+  justify-content: space-around !important;
+  align-items: center !important;
+  height: 100% !important;
+  width: 100% !important;
+  padding: 0 10px !important;
 }
 
 /* Navigation tabs in the floating pill */
-[data-theme="ios-glass"] .glass-mobile-shell .tab-bar button {
+[data-theme="ios-glass"] .glass-mobile-shell .bottom-nav button {
   background: transparent !important;
   border: 1px solid transparent !important;
   color: rgba(255, 255, 255, 0.45) !important;
@@ -328,36 +335,45 @@
   letter-spacing: 0.05em !important;
   cursor: pointer !important;
   transition: all 0.2s ease !important;
+  margin: 0 !important;
 }
 
-[data-theme="ios-glass"] .glass-mobile-shell .tab-bar button:hover {
+[data-theme="ios-glass"] .glass-mobile-shell .bottom-nav button:hover {
   color: white !important;
 }
 
-[data-theme="ios-glass"] .glass-mobile-shell .tab-bar button.active {
+[data-theme="ios-glass"] .glass-mobile-shell .bottom-nav button.active {
   background: rgba(255, 255, 255, 0.12) !important;
   border-color: rgba(255, 255, 255, 0.2) !important;
   color: white !important;
   box-shadow: inset 0 1px 0 rgba(255, 255, 255, 0.2) !important;
 }
 
-/* Floating central tab-bar-fab button (Add password button) */
-[data-theme="ios-glass"] .glass-mobile-shell .tab-bar .tab-bar-fab {
-  background: linear-gradient(135deg, #4f8ef7, #3b82f6) !important;
-  color: white !important;
-  width: 44px !important;
-  height: 44px !important;
-  font-size: 20px !important;
-  display: flex !important;
-  align-items: center !important;
-  justify-content: center !important;
-  border-radius: 50% !important;
-  border: none !important;
-  box-shadow: 0 4px 16px rgba(59, 130, 246, 0.45), inset 0 1px 0 rgba(255, 255, 255, 0.25) !important;
+[data-theme="ios-glass"] .glass-mobile-shell .bottom-nav button.active::after {
+  display: none !important;
 }
 
-[data-theme="ios-glass"] .glass-mobile-shell .tab-bar .tab-bar-fab:hover {
-  transform: scale(1.05);
+/* Floating central fab button (Add password button) positioned elegantly above the pill */
+[data-theme="ios-glass"] .glass-mobile-shell .fab {
+  background: linear-gradient(135deg, #4f8ef7, #3b82f6) !important;
+  color: white !important;
+  border: none !important;
+  box-shadow: 0 4px 16px rgba(59, 130, 246, 0.45), inset 0 1px 0 rgba(255, 255, 255, 0.25) !important;
+  bottom: 96px !important;
+  right: 24px !important;
+  width: 56px !important;
+  height: 56px !important;
+  border-radius: 50% !important;
+  transition: transform 0.2s ease !important;
+}
+
+[data-theme="ios-glass"] .glass-mobile-shell .fab-plus::before,
+[data-theme="ios-glass"] .glass-mobile-shell .fab-plus::after {
+  background: white !important;
+}
+
+[data-theme="ios-glass"] .glass-mobile-shell .fab:hover {
+  transform: scale(1.05) !important;
 }
 
 /* Mobile Toast */
@@ -399,6 +415,12 @@
   transition: all 0.25s ease !important;
   backdrop-filter: blur(12px) !important;
   -webkit-backdrop-filter: blur(12px) !important;
+}
+
+[data-theme="ios-glass"] select option,
+[data-theme="ios-glass"] select optgroup {
+  background-color: #1c1c1e !important;
+  color: #ffffff !important;
 }
 
 [data-theme="ios-glass"] input:focus,
@@ -531,14 +553,14 @@
 /* Translucent Frosted Entry list */
 [data-theme="ios-glass"] .entry-list {
   list-style: none !important;
-  padding: 4px 2px !important;
+  padding: 8px 4px !important;
   overflow-y: auto !important;
   flex: 1 !important;
   min-height: 0 !important;
   margin: 0 !important;
   display: flex;
   flex-direction: column;
-  gap: 10px;
+  gap: 12px;
 }
 
 [data-theme="ios-glass"] .entry-card {
@@ -549,8 +571,6 @@
   padding: 12px 16px !important;
   text-align: left !important;
   background: rgba(255, 255, 255, 0.05) !important;
-  backdrop-filter: blur(10px) !important;
-  -webkit-backdrop-filter: blur(10px) !important;
   border: 1px solid rgba(255, 255, 255, 0.1) !important;
   border-top-color: rgba(255, 255, 255, 0.18) !important;
   border-radius: 14px !important;
@@ -723,8 +743,10 @@
 .glass-auth-card {
   width: min(680px, 92vw) !important;
   max-height: 92vh !important;
-  overflow: visible !important;
+  overflow: hidden !important;
   padding: 2.25rem 2rem !important;
+  display: flex !important;
+  flex-direction: column !important;
 }
 
 .glass-loading {
@@ -783,4 +805,76 @@
     border-bottom: 1px solid rgba(255, 255, 255, 0.12);
     padding-bottom: 16px;
   }
+
+  .glass-auth-card {
+    padding: 1.5rem 1.25rem !important;
+    width: 95vw !important;
+    max-height: 95vh !important;
+    border-radius: 18px !important;
+  }
+  
+  [data-theme="ios-glass"] .glass-mobile-shell .topbar {
+    padding: 12px 16px !important;
+    padding-top: calc(12px + env(safe-area-inset-top)) !important;
+  }
+  
+  [data-theme="ios-glass"] .glass-mobile-shell .main-content {
+    padding: 12px 16px 88px !important;
+    gap: 10px !important;
+  }
+  
+  [data-theme="ios-glass"] .glass-mobile-shell input[type="text"],
+  [data-theme="ios-glass"] .glass-mobile-shell input[type="password"],
+  [data-theme="ios-glass"] .glass-mobile-shell input[type="search"],
+  [data-theme="ios-glass"] .glass-mobile-shell select,
+  [data-theme="ios-glass"] .glass-mobile-shell button {
+    padding: 10px 14px !important;
+    font-size: 13px !important;
+  }
+}
+
+/* Glass Theme overrides for standard components when rendered inside mobile shell */
+[data-theme="ios-glass"] .filter-chip {
+  background: rgba(255, 255, 255, 0.05) !important;
+  border: 1px solid rgba(255, 255, 255, 0.08) !important;
+  color: rgba(255, 255, 255, 0.65) !important;
+  border-radius: 12px !important;
+  padding: 6px 12px !important;
+  font-size: 12px !important;
+  backdrop-filter: blur(8px) !important;
+  -webkit-backdrop-filter: blur(8px) !important;
+  transition: all 0.2s ease !important;
+  display: inline-flex !important;
+  align-items: center !important;
+  gap: 6px !important;
+}
+
+[data-theme="ios-glass"] .filter-chip:hover {
+  background: rgba(255, 255, 255, 0.1) !important;
+  color: white !important;
+}
+
+[data-theme="ios-glass"] .filter-chip.active {
+  background: rgba(79, 142, 247, 0.25) !important;
+  border-color: rgba(79, 142, 247, 0.6) !important;
+  color: white !important;
+  box-shadow: 0 4px 12px rgba(79, 142, 247, 0.25) !important;
+}
+
+[data-theme="ios-glass"] .search {
+  margin-bottom: 8px !important;
+}
+
+[data-theme="ios-glass"] .category-filter {
+  margin-bottom: 8px !important;
+  gap: 8px !important;
+}
+
+/* iOS Glass theme warning icon styling */
+[data-theme="ios-glass"] .warning-icon {
+  color: #ff9500 !important; /* iOS orange warning color */
+  display: inline-flex !important;
+  align-items: center !important;
+  justify-content: center !important;
+  margin-left: 6px !important;
 }

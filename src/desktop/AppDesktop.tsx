@@ -192,6 +192,7 @@ export default function AppDesktop() {
         <div className="desktop-auth-card">
           {!vault.hasVault ? (
             <SetupWizard
+              layout="desktop"
               busy={vault.busy}
               error={vault.error}
               onComplete={vault.completeSetup}

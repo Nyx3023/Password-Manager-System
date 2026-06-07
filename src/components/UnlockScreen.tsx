@@ -1,6 +1,7 @@
 import { FormEvent, useCallback, useEffect, useRef, useState } from "react";
 import { LoadingIndicator } from "./LoadingIndicator";
 import { MpinPad } from "./MpinPad";
+import { ConfirmModal } from "./ConfirmModal";
 
 type UnlockMode = "mpin" | "recovery";
 
@@ -71,13 +72,18 @@ export function UnlockScreen({
     if (ok) setPassword("");
   };
 
-  const handleReset = async () => {
+  const [showResetConfirm, setShowResetConfirm] = useState(false);
+
+  const handleReset = () => {
     if (!onResetApp) return;
-    const ok = confirm(
-      "Erase all vault data, people, passwords, and cached icons? This cannot be undone.",
-    );
-    if (!ok) return;
-    await onResetApp();
+    setShowResetConfirm(true);
+  };
+
+  const handleResetConfirm = async () => {
+    setShowResetConfirm(false);
+    if (onResetApp) {
+      await onResetApp();
+    }
   };
 
   return (
@@ -349,6 +355,19 @@ export function UnlockScreen({
           )}
         </div>
       )}
+
+      <ConfirmModal
+        open={showResetConfirm}
+        title="Reset App"
+        message="Erase all vault data, people, passwords, and cached icons? This cannot be undone."
+        confirmText="Erase All"
+        cancelText="Cancel"
+        onConfirm={() => {
+          void handleResetConfirm();
+        }}
+        onCancel={() => setShowResetConfirm(false)}
+        danger
+      />
     </div>
   );
 }
