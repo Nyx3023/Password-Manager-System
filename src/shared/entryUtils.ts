@@ -19,9 +19,26 @@ export function normalizeEntry(entry: VaultEntry): VaultEntry {
 export function normalizePayload(payload: VaultPayload): VaultPayload {
   return {
     version: 2,
+    vaultId: payload.vaultId,
     people: Array.isArray(payload.people) ? payload.people : [],
     entries: Array.isArray(payload.entries)
       ? payload.entries.map(normalizeEntry)
+      : [],
+    deletedEntries: Array.isArray(payload.deletedEntries)
+      ? payload.deletedEntries.filter(
+          (t) => typeof t.id === "string" && typeof t.deletedAt === "string",
+        )
+      : [],
+    deletedPeople: Array.isArray(payload.deletedPeople)
+      ? payload.deletedPeople.filter(
+          (t) => typeof t.id === "string" && typeof t.deletedAt === "string",
+        )
+      : [],
+    trashEntries: Array.isArray(payload.trashEntries)
+      ? payload.trashEntries.map((t) => ({
+          ...normalizeEntry(t),
+          trashedAt: t.trashedAt || new Date().toISOString(),
+        }))
       : [],
   };
 }

@@ -1,8 +1,9 @@
 {
-  "name": "password-manager-system",
+  "name": "securex",
   "version": "1.0.0",
   "private": true,
-  "description": "Offline password vault for Android and Windows desktop",
+  "description": "SecureX — Offline password vault for Android and Windows desktop",
+  "author": "SecureX Team",
   "type": "module",
   "main": "desktop/main.cjs",
   "scripts": {
@@ -12,7 +13,9 @@
     "desktop": "npm run build:desktop && electron .",
     "build": "tsc -p tsconfig.json && vite build",
     "build:desktop": "tsc -p tsconfig.json && vite build --mode desktop",
+    "test": "vitest run",
     "pack:win": "npm run build:desktop && npx electron-builder --win --x64 --dir",
+    "build:portable": "npm run build:desktop && npx electron-builder --win portable --x64",
     "build:android": "npm run build && npx cap sync android",
     "cap:add": "npx cap add android",
     "cap:open": "npx cap open android",
@@ -21,12 +24,14 @@
   },
   "dependencies": {
     "@capacitor/android": "^7.2.0",
+    "@capacitor/app": "^7.1.2",
     "@capacitor/core": "^7.2.0",
     "@capacitor/filesystem": "^7.1.1",
     "@capacitor/share": "^7.0.1",
     "@capawesome/capacitor-file-picker": "^7.2.0",
     "@capgo/capacitor-native-biometric": "^7.1.0",
     "hash-wasm": "^4.12.0",
+    "jsqr": "^1.4.0",
     "react": "^19.1.0",
     "react-dom": "^19.1.0",
     "vault-autofill": "file:plugins/vault-autofill",
@@ -39,7 +44,8 @@
     "@vitejs/plugin-react": "^4.4.1",
     "electron": "^35.7.5",
     "typescript": "^5.8.3",
-    "vite": "^6.3.5"
+    "vite": "^6.3.5",
+    "vitest": "^5.0.1"
   },
   "capacitor": {
     "platforms": [

@@ -1,4 +1,4 @@
-import { useCallback, useMemo, useRef, useState } from "react";
+import { useCallback, useMemo, useState } from "react";
 import type { SetupData } from "@/components/setup/SetupWizard";
 import {
   disableBiometricUnlock,
@@ -10,25 +10,13 @@ import { isVaultDecryptError } from "@/shared/vaultErrors";
 import { clearAutofillSession, syncAutofillSession } from "@/shared/autofillSync";
 import { chromeRowToEntry, parseChromeCsv } from "@/shared/chromeCsv";
 import { validateMasterPassword } from "@/shared/passwordPolicy";
-import type { SyncIconState } from "@/components/SyncIcon";
-import {
-  pullVaultFromPc,
-  pushVaultToPc,
-  isLanPaired,
-  loadLanPrefs,
-  loadStoredVaultEtag,
-  loadLastSyncAt,
-  storeLastSyncAt,
-  fetchPcStatus,
-  storeVaultEtag,
-} from "@/shared/lanSync";
-import { isCapacitorNative } from "@/shared/platform";
 import { loadPrefs, resetAllAppData, savePrefs } from "@/shared/storage";
 import { VaultService } from "@/shared/vaultService";
 import type {
   ImportMode,
   Person,
   PersonCategoryId,
+  TrashEntry,
   VaultEntry,
 } from "@/shared/types";
 
@@ -41,19 +29,17 @@ export function useVault() {
   const [hasVault, setHasVault] = useState(false);
   const [unlocked, setUnlocked] = useState(false);
   const [entries, setEntries] = useState<VaultEntry[]>([]);
+  const [trashEntries, setTrashEntries] = useState<TrashEntry[]>([]);
   const [people, setPeople] = useState<Person[]>([]);
   const [biometricsEnabled, setBiometricsEnabled] = useState(false);
   const [biometricsAvailable, setBiometricsAvailable] = useState(false);
   const [mpinEnabled, setMpinEnabled] = useState(false);
   const [error, setError] = useState<string | null>(null);
   const [busy, setBusy] = useState(false);
-  const [syncVisual, setSyncVisual] = useState<SyncIconState>("idle");
-  const [lastSyncAt, setLastSyncAt] = useState<string | null>(() =>
-    loadLastSyncAt(),
-  );
 
   const sync = useCallback(() => {
     setEntries([...service.entries]);
+    setTrashEntries([...service.trashEntries]);
     setPeople([...service.people]);
     setUnlocked(service.isUnlocked);
     // MPIN presence must come from disk (refreshMeta / setMpin / removeMpin).
@@ -62,153 +48,6 @@ export function useVault() {
       void syncAutofillSession(service.entries, service.people);
     }
   }, [service]);
-
-  const syncInFlight = useRef(false);
-  const syncDebounce = useRef<ReturnType<typeof setTimeout> | null>(null);
-  const syncVisualTimer = useRef<ReturnType<typeof setTimeout> | null>(null);
-  const localDirtyRef = useRef(false);
-
-  const pulseSyncVisual = useCallback(
-    (state: SyncIconState, revertMs?: number) => {
-      setSyncVisual(state);
-      if (syncVisualTimer.current) clearTimeout(syncVisualTimer.current);
-      if (revertMs !== undefined && state !== "idle") {
-        syncVisualTimer.current = setTimeout(() => {
-          setSyncVisual("idle");
-          syncVisualTimer.current = null;
-        }, revertMs);
-      }
-    },
-    [],
-  );
-
-  const markLocalDirty = useCallback(() => {
-    localDirtyRef.current = true;
-  }, []);
-
-  const syncWithPc = useCallback(async () => {
-    if (!isCapacitorNative() || !isLanPaired() || !service.isUnlocked) return;
-    if (syncInFlight.current) return;
-
-    const prefs = loadLanPrefs();
-    if (!prefs.host) return;
-
-    syncInFlight.current = true;
-    try {
-      const status = await fetchPcStatus(prefs.host, prefs.port);
-      if (!status.running) return;
-
-      const remoteEtag = status.vaultEtag ?? null;
-      const knownEtag = loadStoredVaultEtag();
-      const needsPull = !!(remoteEtag && remoteEtag !== knownEtag);
-      const needsPush = localDirtyRef.current;
-
-      if (!needsPull && !needsPush) return;
-
-      pulseSyncVisual("syncing");
-
-      let changed = false;
-
-      if (needsPull) {
-        const { content, etag } = await pullVaultFromPc({
-          host: prefs.host,
-          port: prefs.port,
-        });
-        await service.mergeUnlockedFromRaw(content);
-        storeVaultEtag(etag ?? remoteEtag);
-        sync();
-        changed = true;
-      }
-
-      if (localDirtyRef.current) {
-        const raw = await service.exportVault();
-        let pushRes = await pushVaultToPc({
-          host: prefs.host,
-          port: prefs.port,
-          vaultJson: raw,
-          force: false,
-        });
-
-        if (
-          !pushRes.ok &&
-          (pushRes.message.includes("changed") ||
-            pushRes.message.includes("Conflict") ||
-            pushRes.message.includes("409"))
-        ) {
-          const { content, etag } = await pullVaultFromPc({
-            host: prefs.host,
-            port: prefs.port,
-          });
-          await service.mergeUnlockedFromRaw(content);
-          storeVaultEtag(etag);
-          sync();
-          const merged = await service.exportVault();
-          pushRes = await pushVaultToPc({
-            host: prefs.host,
-            port: prefs.port,
-            vaultJson: merged,
-            force: false,
-          });
-        }
-
-        if (pushRes.ok) {
-          localDirtyRef.current = false;
-          changed = true;
-        }
-      }
-
-      if (changed) {
-        const at = storeLastSyncAt();
-        setLastSyncAt(at);
-        pulseSyncVisual("success", 2000);
-      } else {
-        pulseSyncVisual("idle");
-      }
-    } catch (e) {
-      if (isVaultDecryptError(e)) {
-        setError(
-          "PC vault uses a different master password than this phone. Import the same .pms backup on both devices, or use Force push to replace the PC vault.",
-        );
-      }
-      pulseSyncVisual("error", 3000);
-    } finally {
-      syncInFlight.current = false;
-    }
-  }, [service, sync, pulseSyncVisual]);
-
-  const checkRemoteSync = useCallback(async () => {
-    if (!isCapacitorNative() || !isLanPaired() || !service.isUnlocked) return;
-    if (syncInFlight.current) return;
-
-    const prefs = loadLanPrefs();
-    if (!prefs.host) return;
-
-    try {
-      const status = await fetchPcStatus(prefs.host, prefs.port);
-      if (!status.running) return;
-
-      const remoteEtag = status.vaultEtag ?? null;
-      const knownEtag = loadStoredVaultEtag();
-      if (
-        (remoteEtag && remoteEtag !== knownEtag) ||
-        localDirtyRef.current
-      ) {
-        await syncWithPc();
-      }
-    } catch {
-      /* ignore background poll errors */
-    }
-  }, [syncWithPc]);
-
-  const scheduleSyncWithPc = useCallback(() => {
-    if (!isCapacitorNative() || !isLanPaired()) return;
-    markLocalDirty();
-    if (syncDebounce.current) clearTimeout(syncDebounce.current);
-    syncDebounce.current = setTimeout(() => {
-      syncDebounce.current = null;
-      void syncWithPc();
-    }, 1500);
-  }, [syncWithPc, markLocalDirty]);
 
   const refreshMeta = useCallback(async () => {
     const repairedBiometrics = await repairBiometricPrefsIfNeeded();
@@ -285,7 +124,6 @@ export function useVault() {
       try {
         await service.unlockWithPassword(password);
         sync();
-        void syncWithPc();
         return true;
       } catch (e) {
         setError(e instanceof Error ? e.message : "Unlock failed.");
@@ -294,7 +132,7 @@ export function useVault() {
         setBusy(false);
       }
     },
-    [service, sync, syncWithPc],
+    [service, sync],
   );
 
   const unlockWithMpin = useCallback(
@@ -304,7 +142,6 @@ export function useVault() {
       try {
         await service.unlockWithMpin(mpin);
         sync();
-        void syncWithPc();
         return true;
       } catch (e) {
         // Surface rate-limit and MPIN-wipe errors from the service.
@@ -326,7 +163,7 @@ export function useVault() {
         setBusy(false);
       }
     },
-    [service, sync, syncWithPc],
+    [service, sync],
   );
 
   const unlockWithBiometrics = useCallback(async () => {
@@ -342,7 +179,6 @@ export function useVault() {
       const prefs = await service.getPrefs();
       setBiometricsEnabled(prefs.biometricsEnabled);
       sync();
-      void syncWithPc();
       return true;
     } catch (e) {
       const prefs = await service.getPrefs();
@@ -356,7 +192,7 @@ export function useVault() {
     } finally {
       setBusy(false);
     }
-  }, [service, sync, syncWithPc]);
+  }, [service, sync]);
 
   const lock = useCallback(() => {
     void clearAutofillSession();
@@ -399,9 +235,8 @@ export function useVault() {
       service.addEntry(entry);
       await service.save();
       sync();
-      scheduleSyncWithPc();
     },
-    [service, sync, scheduleSyncWithPc],
+    [service, sync],
   );
 
   const updateEntry = useCallback(
@@ -412,9 +247,8 @@ export function useVault() {
       service.updateEntry(id, entry);
       await service.save();
       sync();
-      scheduleSyncWithPc();
     },
-    [service, sync, scheduleSyncWithPc],
+    [service, sync],
   );
 
   const deleteEntry = useCallback(
@@ -422,9 +256,8 @@ export function useVault() {
       service.deleteEntry(id);
       await service.save();
       sync();
-      scheduleSyncWithPc();
     },
-    [service, sync, scheduleSyncWithPc],
+    [service, sync],
   );
 
   // ============================================================
@@ -437,14 +270,13 @@ export function useVault() {
         const person = service.addPerson(name, category, emoji);
         await service.save();
         sync();
-        scheduleSyncWithPc();
         return person;
       } catch (e) {
         setError(e instanceof Error ? e.message : "Could not add person.");
         return null;
       }
     },
-    [service, sync, scheduleSyncWithPc],
+    [service, sync],
   );
 
   const updatePerson = useCallback(
@@ -455,9 +287,8 @@ export function useVault() {
       service.updatePerson(id, update);
       await service.save();
       sync();
-      scheduleSyncWithPc();
     },
-    [service, sync, scheduleSyncWithPc],
+    [service, sync],
   );
 
   const deletePerson = useCallback(
@@ -465,10 +296,9 @@ export function useVault() {
       const result = service.deletePerson(id);
       await service.save();
       sync();
-      scheduleSyncWithPc();
       return result;
     },
-    [service, sync, scheduleSyncWithPc],
+    [service, sync],
   );
 
   // ============================================================
@@ -664,27 +494,27 @@ export function useVault() {
     }
   }, [service, sync]);
 
-  const pullFromPc = useCallback(
-    async (host: string, port: number) => {
+  const mergeUnlockedFromRaw = useCallback(
+    async (fileContent: string) => {
+      setError(null);
+      await service.mergeUnlockedFromRaw(fileContent);
+      sync();
+    },
+    [service, sync],
+  );
+
+  const restoreTrashEntry = useCallback(
+    async (id: string) => {
       setError(null);
       setBusy(true);
       try {
-        const { content, etag } = await pullVaultFromPc({ host, port });
-        await service.mergeUnlockedFromRaw(content);
-        storeVaultEtag(etag);
+        const item = service.restoreTrashEntry(id);
+        await service.save();
         sync();
-        const at = storeLastSyncAt();
-        setLastSyncAt(at);
-        localDirtyRef.current = false;
-        return { ok: true, message: "Merged vault from PC." };
+        return item;
       } catch (e) {
-        let message = e instanceof Error ? e.message : "Pull failed.";
-        if (isVaultDecryptError(e)) {
-          message =
-            "PC vault cannot be opened with this phone's key. Use Push to PC to copy the phone vault to the PC, or import the same .pms backup on both devices first.";
-        }
-        setError(message);
-        return { ok: false, message };
+        setError(e instanceof Error ? e.message : "Restore failed.");
+        return null;
       } finally {
         setBusy(false);
       }
@@ -692,50 +522,58 @@ export function useVault() {
     [service, sync],
   );
 
-  const pushToPc = useCallback(
-    async (host: string, port: number, force = false) => {
+  const purgeTrashEntry = useCallback(
+    async (id: string) => {
       setError(null);
       setBusy(true);
       try {
-        if (!force) {
-          try {
-            const { content, etag } = await pullVaultFromPc({ host, port });
-            await service.mergeUnlockedFromRaw(content);
-            storeVaultEtag(etag);
-            sync();
-          } catch (e) {
-            if (isVaultDecryptError(e)) {
-              const message =
-                "PC vault uses a different master password. Import the same .pms backup on both devices, or use Force push to replace the PC vault.";
-              setError(message);
-              return { ok: false, message };
-            }
-            const msg = e instanceof Error ? e.message : "";
-            if (!msg.includes("No vault on the PC")) {
-              throw e;
-            }
-          }
-        }
-
-        const raw = await service.exportVault();
-        const result = await pushVaultToPc({
-          host,
-          port,
-          vaultJson: raw,
-          force,
-        });
-        if (result.ok) {
-          localDirtyRef.current = false;
-          const at = storeLastSyncAt();
-          setLastSyncAt(at);
-        } else {
-          setError(result.message);
-        }
-        return result;
+        service.purgeTrashEntry(id);
+        await service.save();
+        sync();
+        return true;
       } catch (e) {
-        const message = e instanceof Error ? e.message : "Push failed.";
-        setError(message);
-        return { ok: false, message };
+        setError(e instanceof Error ? e.message : "Delete failed.");
+        return false;
+      } finally {
+        setBusy(false);
+      }
+    },
+    [service, sync],
+  );
+
+  const emptyTrash = useCallback(
+    async () => {
+      setError(null);
+      setBusy(true);
+      try {
+        service.emptyTrash();
+        await service.save();
+        sync();
+        return true;
+      } catch (e) {
+        setError(e instanceof Error ? e.message : "Empty trash failed.");
+        return false;
+      } finally {
+        setBusy(false);
+      }
+    },
+    [service, sync],
+  );
+
+  const importTotpAccounts = useCallback(
+    async (
+      accounts: { name: string; issuer?: string; secret: string; digits?: number; period?: number }[],
+      personId: string,
+    ) => {
+      setError(null);
+      setBusy(true);
+      try {
+        const count = await service.importTotpAccounts(accounts, personId);
+        sync();
+        return count;
+      } catch (e) {
+        setError(e instanceof Error ? e.message : "Import failed.");
+        return 0;
       } finally {
         setBusy(false);
       }
@@ -746,8 +584,10 @@ export function useVault() {
   return {
     ready,
     hasVault,
+    vaultId: service.vaultId,
     unlocked,
     entries,
+    trashEntries,
     people,
     biometricsEnabled,
     biometricsAvailable,
@@ -763,6 +603,10 @@ export function useVault() {
     addEntry,
     updateEntry,
     deleteEntry,
+    restoreTrashEntry,
+    purgeTrashEntry,
+    emptyTrash,
+    importTotpAccounts,
     addPerson,
     updatePerson,
     deletePerson,
@@ -775,13 +619,7 @@ export function useVault() {
     importVault,
     importChromeCsv,
     reloadFromDiskAfterSync,
-    syncWithPc,
-    checkRemoteSync,
-    syncVisual,
-    lastSyncAt,
-    pulseSyncVisual,
-    pullFromPc,
-    pushToPc,
+    mergeUnlockedFromRaw,
     setError,
     refreshMeta,
     resetApp,

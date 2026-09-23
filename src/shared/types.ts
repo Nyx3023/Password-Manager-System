@@ -15,6 +15,32 @@ export interface Person {
   updatedAt: string;
 }
 
+export interface CustomField {
+  id: string;
+  label: string;
+  value: string;
+  type?: "text" | "hidden";
+}
+
+export interface PasswordHistoryItem {
+  password: string;
+  changedAt: string;
+}
+
+export interface DeletedEntryTombstone {
+  id: string;
+  deletedAt: string;
+}
+
+export interface DeletedPersonTombstone {
+  id: string;
+  deletedAt: string;
+}
+
+export interface TrashEntry extends VaultEntry {
+  trashedAt: string;
+}
+
 export interface VaultEntry {
   id: string;
   /** Auto-generated label (e.g. "Instagram — Mom"). Optional override allowed. */
@@ -29,14 +55,21 @@ export interface VaultEntry {
   password: string;
   url: string;
   notes: string;
+  totpSeed?: string;
+  customFields?: CustomField[];
+  passwordHistory?: PasswordHistoryItem[];
   createdAt: string;
   updatedAt: string;
 }
 
 export interface VaultPayload {
   version: 2;
+  vaultId?: string;
   people: Person[];
   entries: VaultEntry[];
+  deletedEntries?: DeletedEntryTombstone[];
+  deletedPeople?: DeletedPersonTombstone[];
+  trashEntries?: TrashEntry[];
 }
 
 /** Wrapping data for one unlock method (master password or MPIN). */
@@ -53,6 +86,7 @@ export interface KeyWrap {
 /** On-disk encrypted vault (safe to export/import as-is). */
 export interface EncryptedVaultFile {
   version: 2;
+  vaultId?: string;
   kdf: "argon2id";
   cipher: "aes-256-gcm";
   /** Master password wrap (always present). */

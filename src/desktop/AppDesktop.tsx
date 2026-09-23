@@ -1,15 +1,22 @@
-import { useCallback, useEffect, useMemo, useRef, useState } from "react";
-import type { TrayStatus } from "@/shared/electron.d";
+import { useCallback, useEffect, useMemo, useState } from "react";
 import { formatLastSync } from "@/shared/syncTime";
 import { SetupWizard } from "@/components/setup/SetupWizard";
 import { UnlockScreen } from "@/components/UnlockScreen";
 import { SettingsScreen } from "@/components/SettingsScreen";
-import { SyncIcon, type SyncIconState } from "@/components/SyncIcon";
+import { GoogleDriveSyncModal } from "@/components/GoogleDriveSyncModal";
 import { useAutoLock } from "@/hooks/useAutoLock";
 import { useClipboard } from "@/hooks/useClipboard";
 import { useVault } from "@/hooks/useVault";
 import { entriesToAutofillCredentials, hostFromUrl } from "@/shared/autofillSync";
+import {
+  type VaultSyncTarget,
+  syncVaultWithGoogleDrive,
+  loadCloudConfig,
+  subscribeCloudSyncConfig,
+  type GoogleDriveConfig,
+} from "@/shared/cloudSync";
 import { DesktopVaultView } from "./DesktopVaultView";
+import { DesktopQuickAccess } from "./DesktopQuickAccess";
 import "./desktop.css";
 
 const AUTO_LOCK_MS = 5 * 60 * 1000;
@@ -22,10 +29,83 @@ export default function AppDesktop() {
   const [toast, setToast] = useState<string | null>(null);
   const [nav, setNav] = useState<Nav>("vault");
   const [adding, setAdding] = useState(false);
-  const [lanStatus, setLanStatus] = useState<TrayStatus | null>(null);
-  const [syncVisual, setSyncVisual] = useState<SyncIconState>("idle");
-  const syncVisualTimer = useRef<ReturnType<typeof setTimeout> | null>(null);
-  const lanAutoStarted = useRef(false);
+  const [quickAccess, setQuickAccess] = useState(false);
+  const [cloudConfig, setCloudConfig] = useState<GoogleDriveConfig | null>(null);
+  const [gdriveModalOpen, setGdriveModalOpen] = useState(false);
+  const [avatarFailed, setAvatarFailed] = useState(false);
+
+  useEffect(() => {
+    void loadCloudConfig().then((cfg) => setCloudConfig(cfg));
+    return subscribeCloudSyncConfig((cfg) => {
+      setCloudConfig(cfg);
+      setAvatarFailed(false);
+    });
+  }, []);
+
+  const vaultTarget = useMemo<VaultSyncTarget>(
+    () => ({
+      unlocked: vault.unlocked,
+      exportVault: vault.exportVault,
+      mergeUnlockedFromRaw: vault.mergeUnlockedFromRaw,
+    }),
+    [vault.unlocked, vault.exportVault, vault.mergeUnlockedFromRaw],
+  );
+
+  // Sync on unlock
+  useEffect(() => {
+    if (!vault.unlocked) return;
+    void loadCloudConfig().then((cfg) => {
+      if (cfg.enabled && cfg.autoSync) {
+        void syncVaultWithGoogleDrive(vaultTarget);
+      }
+    });
+  }, [vault.unlocked, vaultTarget]);
+
+  // Debounced auto-sync when entries, trash, or people change
+  useEffect(() => {
+    if (!vault.unlocked) return;
+    const timer = window.setTimeout(() => {
+      void loadCloudConfig().then((cfg) => {
+        if (cfg.enabled && cfg.autoSync) {
+          void syncVaultWithGoogleDrive(vaultTarget);
+        }
+      });
+    }, 2500);
+    return () => window.clearTimeout(timer);
+  }, [vault.entries, vault.trashEntries, vault.people, vault.unlocked, vaultTarget]);
+
+  // Auto-sync on window focus, visibility change, and periodic 60s
+  useEffect(() => {
+    if (!vault.unlocked) return;
+    const triggerSync = () => {
+      void loadCloudConfig().then((cfg) => {
+        if (cfg.enabled && cfg.autoSync) {
+          void syncVaultWithGoogleDrive(vaultTarget);
+        }
+      });
+    };
+
+    const handleVisibility = () => {
+      if (document.visibilityState === "visible") {
+        triggerSync();
+      }
+    };
+
+    window.addEventListener("focus", triggerSync);
+    document.addEventListener("visibilitychange", handleVisibility);
+    const interval = window.setInterval(triggerSync, 60_000);
+
+    return () => {
+      window.removeEventListener("focus", triggerSync);
+      document.removeEventListener("visibilitychange", handleVisibility);
+      window.clearInterval(interval);
+    };
+  }, [vault.unlocked, vaultTarget]);
+
+  const showToast = useCallback((message: string) => {
+    setToast(message);
+    window.setTimeout(() => setToast(null), 3000);
+  }, []);
 
   useEffect(() => {
     void vault.init();
@@ -38,75 +118,59 @@ export default function AppDesktop() {
     return unsub;
   }, [vault.lock]);
 
-  const pulseSyncVisual = useCallback(
-    (state: SyncIconState, revertMs?: number) => {
-      setSyncVisual(state);
-      if (syncVisualTimer.current) clearTimeout(syncVisualTimer.current);
-      if (revertMs !== undefined && state !== "idle") {
-        syncVisualTimer.current = setTimeout(() => {
-          setSyncVisual("idle");
-          syncVisualTimer.current = null;
-        }, revertMs);
-      }
-    },
-    [],
-  );
-
-  const refreshLanStatus = useCallback(async () => {
-    if (!window.electronAPI) return;
-    const st = await window.electronAPI.getTrayStatus();
-    setLanStatus(st);
-  }, []);
-
-  const showToast = useCallback((message: string) => {
-    setToast(message);
-    window.setTimeout(() => setToast(null), 3000);
-  }, []);
-
-  const startLan = useCallback(async () => {
-    if (!window.electronAPI) return;
-    const st = await window.electronAPI.startLanServer();
-    setLanStatus(st);
-    if (st.error) {
-      showToast(st.error);
-    }
-    return st;
-  }, [showToast]);
-
-  useEffect(() => {
-    if (!window.electronAPI || lanAutoStarted.current) return;
-    lanAutoStarted.current = true;
-    void (async () => {
-      const st = await window.electronAPI!.getTrayStatus();
-      if (!st.running) {
-        await startLan();
-      } else {
-        setLanStatus(st);
-      }
-    })();
-  }, [startLan]);
-
   useEffect(() => {
     if (!window.electronAPI) return;
-    return window.electronAPI.onLanVaultUpdated(() => {
-      void refreshLanStatus();
-      if (!vault.unlocked) return;
-
-      pulseSyncVisual("syncing");
-      void vault.reloadFromDiskAfterSync().then((ok) => {
-        if (ok) {
-          pulseSyncVisual("success", 2000);
-        } else {
-          pulseSyncVisual("error", 3000);
-        }
-      });
+    return window.electronAPI.onToggleQuickAccess(() => {
+      setQuickAccess((prev) => !prev);
     });
-  }, [
-    vault.reloadFromDiskAfterSync,
-    vault.unlocked,
-    refreshLanStatus,
-    pulseSyncVisual,
-  ]);
+  }, []);
+
+  useEffect(() => {
+    if (!window.electronAPI) return;
+    return window.electronAPI.onSaveCredential(({ id, credential }) => {
+      if (!vault.unlocked) {
+        showToast("Unlock SecureX to save new credentials.");
+        window.electronAPI?.sendAutofillResponse(id, { ok: false, error: "LOCKED" });
+        return;
+      }
+      const existing = vault.entries.find(
+        (e) =>
+          e.url &&
+          credential.url &&
+          hostFromUrl(e.url) === hostFromUrl(credential.url) &&
+          (!credential.username || e.username === credential.username),
+      );
+      if (existing && credential.password) {
+        void vault
+          .updateEntry(existing.id, {
+            ...existing,
+            password: credential.password,
+          })
+          .then(() => {
+            showToast(`Updated password for ${existing.title}`);
+            window.electronAPI?.sendAutofillResponse(id, { ok: true });
+          });
+      } else if (credential.password) {
+        const title =
+          credential.title || hostFromUrl(credential.url) || "New Account";
+        void vault
+          .addEntry({
+            title,
+            personId: vault.people[0]?.id || "",
+            categoryId: "other",
+            subcategoryId: "other",
+            username: credential.username || "",
+            password: credential.password,
+            url: credential.url || "",
+            notes: "Saved via SecureX Autofill",
+          })
+          .then(() => {
+            showToast(`Saved account for ${title}`);
+            window.electronAPI?.sendAutofillResponse(id, { ok: true });
+          });
+      }
+    });
+  }, [vault, showToast]);
 
   useEffect(() => {
     const onSettings = () => setNav("settings");
@@ -142,10 +206,6 @@ export default function AppDesktop() {
     });
   }, [vault.unlocked, vault.entries, vault.people]);
 
-  useEffect(() => {
-    void refreshLanStatus();
-  }, [vault.unlocked, nav, refreshLanStatus]);
-
   useAutoLock(vault.unlocked, AUTO_LOCK_MS, vault.lock);
 
   const handleCopy = useCallback(
@@ -156,27 +216,6 @@ export default function AppDesktop() {
     },
     [copy, showToast],
   );
-
-  const stopLan = useCallback(async () => {
-    if (!window.electronAPI) return;
-    const st = await window.electronAPI.stopLanServer();
-    setLanStatus(st);
-    showToast("LAN server stopped");
-  }, [showToast]);
-
-  const desktopLan = useMemo(() => {
-    if (!window.electronAPI) return undefined;
-    return {
-      status: lanStatus,
-      busy: vault.busy,
-      onRefresh: refreshLanStatus,
-      onStop: stopLan,
-      onCopyAddress: (address: string) => {
-        void copy(address);
-        showToast("Address copied.");
-      },
-    };
-  }, [lanStatus, vault.busy, refreshLanStatus, stopLan, copy, showToast]);
 
   if (!vault.ready) {
     return (
@@ -192,6 +231,7 @@ export default function AppDesktop() {
         <div className="desktop-auth-card">
           {!vault.hasVault ? (
             <SetupWizard
+              layout="desktop"
               busy={vault.busy}
               error={vault.error}
               onComplete={vault.completeSetup}
@@ -199,12 +239,9 @@ export default function AppDesktop() {
                 vault.importVault(content, password, "replace")
               }
               onVerifyBackup={vault.verifyBackupPassword}
-              onCompleteImport={async (content, password, enableBiometrics, mpin) => {
+              onCompleteImport={async (content, password, _enableBiometrics, mpin) => {
                 const ok = await vault.importVault(content, password, "replace");
                 if (ok) {
-                  if (enableBiometrics) {
-                    try { await vault.enableBiometrics(); } catch {}
-                  }
                   if (mpin && mpin.length === 8) {
                     await vault.setMpin(mpin, mpin);
                   }
@@ -223,7 +260,6 @@ export default function AppDesktop() {
               mpinEnabled={vault.mpinEnabled}
               onUnlockPassword={vault.unlockWithPassword}
               onUnlockMpin={vault.unlockWithMpin}
-              onUnlockBiometric={vault.unlockWithBiometrics}
               onRestoreBackup={(content, password) =>
                 vault.importVault(content, password, "replace")
               }
@@ -235,14 +271,10 @@ export default function AppDesktop() {
     );
   }
 
-  const lanRunning = lanStatus?.running ?? false;
-  const iconState: SyncIconState =
-    syncVisual === "idle" && lanRunning ? "idle" : syncVisual;
-
   return (
     <div className="desktop-shell">
       <aside className="desktop-sidebar">
-        <p className="desktop-brand">PASSWORD MANAGER</p>
+        <p className="desktop-brand">SECUREX</p>
         <div className="dot-matrix desktop-dots" aria-hidden>
           {Array.from({ length: 12 }).map((_, i) => (
             <span key={i} className={i % 4 === 0 ? "dot dot--accent" : "dot"} />
@@ -267,14 +299,24 @@ export default function AppDesktop() {
         <button
           type="button"
           className="desktop-sidebar-footer"
-          onClick={() => setNav("settings")}
+          onClick={() => setGdriveModalOpen(true)}
         >
-          <p className="label-mono">LAN SYNC</p>
-          <p className="muted small">
-            {lanRunning ? lanStatus?.address : "Starting..."}
+          <p className="label-mono">GOOGLE DRIVE</p>
+          <p
+            className="muted small"
+            style={{
+              color: cloudConfig?.enabled ? "var(--accent)" : undefined,
+              margin: "2px 0",
+            }}
+          >
+            {cloudConfig?.enabled
+              ? `☁️ Drive: ${cloudConfig.userEmail?.split("@")[0] || "Connected"}`
+              : "☁️ Drive: Offline"}
           </p>
           <p className="muted small desktop-sidebar-lan-hint">
-            Last sync {formatLastSync(lanStatus?.lastSyncAt ?? null)}
+            {cloudConfig?.enabled
+              ? `Last sync ${formatLastSync(cloudConfig.lastSyncAt ?? null)}`
+              : "Click to connect"}
           </p>
         </button>
       </aside>
@@ -283,29 +325,85 @@ export default function AppDesktop() {
         <header className="desktop-topbar">
           <div className="desktop-topbar-title">
             <h1>{nav === "vault" ? "Vault" : "Settings"}</h1>
-            {lanRunning && (
+            {cloudConfig?.enabled && (
               <p className="muted small desktop-topbar-sync-meta">
-                LAN on | Last sync {formatLastSync(lanStatus?.lastSyncAt ?? null)}
+                Drive connected | Last sync {formatLastSync(cloudConfig.lastSyncAt ?? null)}
               </p>
             )}
           </div>
           <div className="desktop-topbar-actions">
             <button
               type="button"
-              className={`topbar-icon-btn topbar-sync-btn desktop-topbar-sync-btn${
-                syncVisual === "success"
-                  ? " topbar-sync-btn--success"
-                  : syncVisual === "error"
-                    ? " topbar-sync-btn--error"
-                    : ""
-              }`}
-              aria-label={
-                syncVisual === "syncing" ? "Syncing with phone" : "LAN sync status"
-              }
-              disabled={syncVisual === "syncing"}
-              onClick={() => setNav("settings")}
+              className="ghost small"
+              onClick={() => setQuickAccess(true)}
+              title="Quick Search (Ctrl+Shift+Space)"
+              style={{ fontSize: "0.75rem" }}
             >
-              <SyncIcon state={iconState} />
+              🔍 Quick Search
+            </button>
+            <button
+              type="button"
+              className={`topbar-google-btn${
+                cloudConfig?.enabled ? " topbar-google-btn--connected" : ""
+              }${
+                cloudConfig?.lastSyncStatus === "syncing"
+                  ? " topbar-google-btn--syncing"
+                  : cloudConfig?.lastSyncStatus === "error"
+                    ? " topbar-google-btn--error"
+                    : cloudConfig?.lastSyncStatus === "success"
+                      ? " topbar-google-btn--success"
+                      : ""
+              }`}
+              title={
+                cloudConfig?.enabled
+                  ? `Google Drive (${cloudConfig.userEmail || "Connected"})${
+                      cloudConfig.lastSyncStatus === "syncing"
+                        ? " - Syncing..."
+                        : cloudConfig.lastSyncAt
+                          ? " - Synced " + formatLastSync(cloudConfig.lastSyncAt)
+                          : ""
+                    }`
+                  : "Connect Google Drive"
+              }
+              aria-label="Google Drive sync"
+              onClick={() => setGdriveModalOpen(true)}
+            >
+              <div className="topbar-google-avatar-wrap">
+                {cloudConfig?.enabled && cloudConfig.userPicture && !avatarFailed ? (
+                  <img
+                    src={cloudConfig.userPicture}
+                    alt={cloudConfig.userName || "Google account"}
+                    className="topbar-google-avatar"
+                    referrerPolicy="no-referrer"
+                    onError={() => setAvatarFailed(true)}
+                  />
+                ) : (
+                  <svg width="18" height="18" viewBox="0 0 24 24" aria-hidden>
+                    <path
+                      fill="#4285F4"
+                      d="M23.745 12.27c0-.7-.06-1.4-.19-2.07H12v4.51h6.6c-.29 1.52-1.14 2.82-2.4 3.68v3.05h3.88c2.27-2.09 3.66-5.17 3.66-9.17z"
+                    />
+                    <path
+                      fill="#34A853"
+                      d="M12 24c3.24 0 5.95-1.08 7.93-2.91l-3.88-3.05c-1.08.72-2.45 1.16-4.05 1.16-3.12 0-5.77-2.1-6.72-4.93H1.25v3.15C3.26 21.36 7.33 24 12 24z"
+                    />
+                    <path
+                      fill="#FBBC05"
+                      d="M5.28 14.27c-.25-.72-.38-1.49-.38-2.27s.13-1.55.38-2.27V6.58H1.25C.45 8.18 0 9.98 0 12s.45 3.82 1.25 5.42l4.03-3.15z"
+                    />
+                    <path
+                      fill="#EA4335"
+                      d="M12 4.75c1.77 0 3.35.61 4.6 1.8l3.42-3.42C17.95 1.19 15.24 0 12 0 7.33 0 3.26 2.64 1.25 6.58l4.03 3.15c.95-2.83 3.6-4.98 6.72-4.98z"
+                    />
+                  </svg>
+                )}
+              </div>
+              {cloudConfig?.enabled && cloudConfig.lastSyncStatus && cloudConfig.lastSyncStatus !== "idle" && (
+                <span
+                  className={`topbar-google-badge topbar-google-badge--${cloudConfig.lastSyncStatus}`}
+                  aria-hidden
+                />
+              )}
             </button>
             {nav === "vault" && (
               <button
@@ -346,7 +444,12 @@ export default function AppDesktop() {
               onImportChromeCsv={vault.importChromeCsv}
               onMessage={showToast}
               onResetApp={vault.resetApp}
-              desktopLan={desktopLan}
+              trashEntries={vault.trashEntries}
+              onRestoreTrash={vault.restoreTrashEntry}
+              onPurgeTrash={vault.purgeTrashEntry}
+              onEmptyTrash={vault.emptyTrash}
+              onImportTotp={vault.importTotpAccounts}
+              vaultTarget={vaultTarget}
             />
           ) : (
             <DesktopVaultView
@@ -364,6 +467,25 @@ export default function AppDesktop() {
           )}
         </main>
       </div>
+
+      {quickAccess && (
+        <DesktopQuickAccess
+          entries={vault.entries}
+          unlocked={vault.unlocked}
+          onClose={() => setQuickAccess(false)}
+          onCopy={handleCopy}
+          onUnlockRequest={() => {
+            setQuickAccess(false);
+          }}
+        />
+      )}
+
+      <GoogleDriveSyncModal
+        open={gdriveModalOpen}
+        vaultTarget={vaultTarget}
+        onClose={() => setGdriveModalOpen(false)}
+        onMessage={showToast}
+      />
     </div>
   );
 }

@@ -6,6 +6,7 @@ const {
   ipcMain,
   nativeImage,
   shell,
+  globalShortcut,
 } = require("electron");
 const fs = require("node:fs");
 const http = require("node:http");
@@ -13,7 +14,6 @@ const path = require("node:path");
 const net = require("node:net");
 const crypto = require("node:crypto");
 const vaultPaths = require("./vaultPaths.cjs");
-const { createLanServer } = require("./lanServer.cjs");
 
 const isDev = !app.isPackaged;
 const VITE_DEV_URL = "http://127.0.0.1:5173/";
@@ -79,16 +79,7 @@ let mainWindow = null;
 let tray = null;
 let shouldQuit = false;
 
-const lan = createLanServer({
-  app,
-  vaultPaths,
-  onVaultWritten: () => {
-    mainWindow?.webContents.send("lan-vault-updated");
-    refreshTray();
-  },
-});
-
-app.setName("Password Manager");
+app.setName("SecureX");
 
 function trayIcon() {
   const size = 16;
@@ -105,44 +96,22 @@ function trayIcon() {
 }
 
 function buildTrayMenu() {
-  const st = lan.status();
-  const syncLabel = st.lastSyncAt
-    ? `Last sync: ${st.lastSyncAt}`
-    : "LAN sync (same Wi-Fi as phone)";
-
   return Menu.buildFromTemplate([
     {
-      label: "Open Password Manager",
+      label: "Open SecureX",
       click: () => showMainWindow(),
+    },
+    {
+      label: "Quick Search (Ctrl+Shift+Space)",
+      click: () => {
+        showMainWindow();
+        mainWindow?.webContents.send("app:toggle-quick-access");
+      },
     },
     {
       label: "Lock vault",
       click: () => requestLock(),
     },
-    { type: "separator" },
-    { label: syncLabel, enabled: false },
-    {
-      label: `LAN: ${st.address}`,
-      click: () => {
-        shell.clipboard.writeText(st.address);
-      },
-    },
-    st.running
-      ? { label: "LAN server running", enabled: false }
-      : { label: "LAN server stopped", enabled: false },
-    st.running
-      ? {
-          label: "Stop LAN server",
-          click: () => {
-            void lan.stop().then((st) => refreshTray(st));
-          },
-        }
-      : {
-          label: "Start LAN server",
-          click: () => {
-            void lan.start().then((st) => refreshTray(st));
-          },
-        },
     { type: "separator" },
     {
       label: "Settings",
@@ -186,6 +155,7 @@ function createWindow() {
       preload: path.join(__dirname, "preload.cjs"),
       contextIsolation: true,
       nodeIntegration: false,
+      webSecurity: false,
     },
   });
 
@@ -257,47 +227,6 @@ function registerIpc() {
 
   ipcMain.handle("storage:vaultDir", () => vaultPaths.getDataDir(app));
 
-  // --- LAN server IPC ---
-
-  ipcMain.handle("tray:status", () => lan.status());
-
-  ipcMain.handle("lan:start", async () => {
-    const st = await lan.start();
-    refreshTray();
-    return st;
-  });
-
-  ipcMain.handle("lan:stop", async () => {
-    const st = await lan.stop();
-    refreshTray();
-    return st;
-  });
-
-  // --- LAN pairing IPC (CRIT-1) ---
-
-  ipcMain.handle("lan:start-pairing", async () => {
-    // Ensure server is running first.
-    if (!lan.status().running) {
-      await lan.start();
-      refreshTray();
-    }
-    const code = lan.startPairing();
-    return { code };
-  });
-
-  ipcMain.handle("lan:stop-pairing", () => {
-    lan.stopPairing();
-  });
-
-  ipcMain.handle("lan:get-pairing-code", () => {
-    return { code: lan.getPairingCode() };
-  });
-
-  ipcMain.handle("lan:unpair", () => {
-    lan.unpair();
-    refreshTray();
-  });
-
   // --- App events ---
 
   ipcMain.on("app:lock", () => requestLock());
@@ -326,6 +255,158 @@ function registerIpc() {
   // Open a URL in the user's default browser
   ipcMain.handle("shell:open-url", (_e, url) => {
     shell.openExternal(url);
+  });
+
+  // Windows auto-start on boot
+  ipcMain.handle("system:get-auto-start", () => {
+    return app.getLoginItemSettings().openAtLogin;
+  });
+
+  ipcMain.handle("system:set-auto-start", (_e, enable) => {
+    app.setLoginItemSettings({
+      openAtLogin: !!enable,
+      args: ["--hidden"],
+    });
+    return app.getLoginItemSettings().openAtLogin;
+  });
+
+  // --- Google Drive OAuth Loopback Server ---
+  let activeOAuthServer = null;
+
+  ipcMain.handle("google:start-auth", async (_e, { authUrlTemplate }) => {
+    if (activeOAuthServer) {
+      try {
+        activeOAuthServer.close();
+      } catch (err) {}
+      activeOAuthServer = null;
+    }
+
+    return new Promise((resolve, reject) => {
+      const server = http.createServer((req, res) => {
+        try {
+          const reqUrl = new URL(req.url, `http://${req.headers.host || "127.0.0.1"}`);
+          if (reqUrl.pathname === "/oauth2callback") {
+            const code = reqUrl.searchParams.get("code");
+            const error = reqUrl.searchParams.get("error");
+
+            res.writeHead(200, { "Content-Type": "text/html; charset=utf-8" });
+            if (code) {
+              res.end(`<!DOCTYPE html>
+<html>
+<head><meta charset="utf-8"><title>SecureX — Authenticated</title></head>
+<body style="font-family:system-ui,-apple-system,sans-serif;background:#0d1117;color:#c9d1d9;display:flex;align-items:center;justify-content:center;height:100vh;margin:0;">
+  <div style="text-align:center;padding:2.5rem;background:#161b22;border:1px solid #30363d;border-radius:12px;max-width:400px;box-shadow:0 8px 24px rgba(0,0,0,0.5);">
+    <div style="font-size:36px;margin-bottom:12px;">✅</div>
+    <h2 style="color:#58a6ff;margin:0 0 8px 0;font-size:20px;">Connected to SecureX</h2>
+    <p style="font-size:14px;color:#8b949e;margin:0 0 16px 0;">Authentication complete. You can close this window now and return to the SecureX application.</p>
+  </div>
+</body>
+</html>`);
+              server.close();
+              activeOAuthServer = null;
+              if (mainWindow && !mainWindow.isDestroyed()) {
+                mainWindow.show();
+                mainWindow.focus();
+              }
+              resolve({ ok: true, code, redirectUri: `http://127.0.0.1:${serverPort}/oauth2callback` });
+            } else {
+              res.end(`<!DOCTYPE html>
+<html>
+<head><meta charset="utf-8"><title>SecureX — Error</title></head>
+<body style="font-family:system-ui,-apple-system,sans-serif;background:#0d1117;color:#c9d1d9;display:flex;align-items:center;justify-content:center;height:100vh;margin:0;">
+  <div style="text-align:center;padding:2.5rem;background:#161b22;border:1px solid #da3633;border-radius:12px;max-width:400px;">
+    <div style="font-size:36px;margin-bottom:12px;">⚠️</div>
+    <h2 style="color:#f85149;margin:0 0 8px 0;">Authentication Cancelled</h2>
+    <p style="font-size:14px;color:#8b949e;">${error || "Access was not granted."}</p>
+  </div>
+</body>
+</html>`);
+              server.close();
+              activeOAuthServer = null;
+              reject(new Error(error || "Authentication cancelled"));
+            }
+          } else {
+            res.writeHead(404);
+            res.end();
+          }
+        } catch (err) {
+          res.writeHead(500);
+          res.end();
+          server.close();
+          activeOAuthServer = null;
+          reject(err);
+        }
+      });
+
+      let serverPort = 0;
+      const timer = setTimeout(() => {
+        try {
+          server.close();
+        } catch (e) {}
+        activeOAuthServer = null;
+        reject(new Error("Authentication timed out after 3 minutes"));
+      }, 180000);
+
+      server.listen(0, "127.0.0.1", () => {
+        serverPort = server.address().port;
+        const redirectUri = `http://127.0.0.1:${serverPort}/oauth2callback`;
+        activeOAuthServer = server;
+
+        const authUrl = authUrlTemplate.replace("__REDIRECT_URI__", encodeURIComponent(redirectUri));
+        shell.openExternal(authUrl);
+      });
+
+      server.on("error", (err) => {
+        clearTimeout(timer);
+        activeOAuthServer = null;
+        reject(err);
+      });
+    });
+  });
+
+  // --- Safe HTTP Fetch Proxy (Node OS-level fetch, zero CORS) ---
+  ipcMain.handle("net:fetch", async (_e, { url, method, headers, body }) => {
+    try {
+      const httpMethod = (method || "GET").toUpperCase();
+      const hasBody = httpMethod !== "GET" && httpMethod !== "HEAD" && body != null && body !== "";
+      const res = await fetch(url, {
+        method: httpMethod,
+        headers: headers || {},
+        body: hasBody ? body : undefined,
+      });
+
+      const contentType = res.headers.get("content-type") || "";
+      let data = null;
+      let text = "";
+      if (contentType.includes("application/json")) {
+        try {
+          data = await res.json();
+          text = JSON.stringify(data);
+        } catch {
+          text = await res.text();
+          data = text;
+        }
+      } else {
+        text = await res.text();
+        data = text;
+      }
+
+      return {
+        ok: res.ok,
+        status: res.status,
+        statusText: res.statusText,
+        data,
+        text,
+      };
+    } catch (err) {
+      console.error("[net:fetch] Error during fetch to", url, ":", err);
+      return {
+        ok: false,
+        status: 0,
+        statusText: err.message || "Network error",
+        error: err.message || "Network error",
+      };
+    }
   });
 }
 
@@ -358,6 +439,15 @@ function startIpcServer() {
             } else {
               socket.write(JSON.stringify({ id: reqId, error: "APP_CLOSED" }) + "\n");
             }
+          } else if (req.type === "SAVE_CREDENTIAL" && req.credential) {
+            const reqId = req.id || ++autofillIdCounter;
+            autofillRequests.set(reqId, socket);
+
+            if (mainWindow && !mainWindow.isDestroyed()) {
+              mainWindow.webContents.send("app:save-credential", { id: reqId, credential: req.credential });
+            } else {
+              socket.write(JSON.stringify({ id: reqId, error: "APP_CLOSED" }) + "\n");
+            }
           } else {
              socket.write(JSON.stringify({ id: req.id, error: "UNKNOWN_REQUEST" }) + "\n");
           }
@@ -385,10 +475,23 @@ app.whenReady().then(() => {
   startIpcServer();
   createWindow();
   createTray();
+
+  try {
+    globalShortcut.register("CommandOrControl+Shift+Space", () => {
+      showMainWindow();
+      mainWindow?.webContents.send("app:toggle-quick-access");
+    });
+  } catch (e) {
+    console.warn("[SecureX] Global shortcut registration failed:", e);
+  }
 });
 
 app.on("window-all-closed", () => {
   /* keep tray alive on Windows */
+});
+
+app.on("will-quit", () => {
+  globalShortcut.unregisterAll();
 });
 
 app.on("before-quit", () => {
@@ -396,3 +499,4 @@ app.on("before-quit", () => {
 });
 
 app.on("activate", () => showMainWindow());
+

@@ -96,7 +96,24 @@ export function EntryList({
                   size="md"
                 />
                 <div className="entry-card-text">
-                  <strong>{entryDisplayTitle(e, people)}</strong>
+                  <div style={{ display: "flex", alignItems: "center", gap: "6px" }}>
+                    <strong>{entryDisplayTitle(e, people)}</strong>
+                    {(e.totpSeed || e.categoryId === "authenticator") && (
+                      <span
+                        style={{
+                          background: "rgba(16, 185, 129, 0.15)",
+                          color: "var(--accent, #10b981)",
+                          fontSize: "0.68rem",
+                          fontWeight: 700,
+                          padding: "1px 5px",
+                          borderRadius: "4px",
+                          letterSpacing: "0.04em",
+                        }}
+                      >
+                        2FA
+                      </span>
+                    )}
+                  </div>
                   <span className="muted">{entrySubtitle(e)}</span>
                 </div>
                 {person && (

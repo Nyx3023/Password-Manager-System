@@ -44,4 +44,19 @@ chrome.runtime.onMessage.addListener((message, sender, sendResponse) => {
     port.postMessage({ id, type: "REQUEST_AUTOFILL", url: message.url });
     return true; // Keep channel open for async response
   }
+
+  if (message.type === "SAVE_CREDENTIAL") {
+    if (!port) connectHost();
+
+    if (!port) {
+      sendResponse({ error: "HOST_NOT_FOUND", details: "Could not connect to Native Host" });
+      return;
+    }
+
+    const id = ++reqId;
+    pendingRequests.set(id, sendResponse);
+
+    port.postMessage({ id, type: "SAVE_CREDENTIAL", credential: message.credential });
+    return true;
+  }
 });

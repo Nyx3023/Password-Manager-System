@@ -6,10 +6,17 @@ const VAULT_BACKUP_FILE = "vault.enc.json.bak";
 const VAULT_TEMP_FILE = "vault.enc.json.tmp";
 const PREFS_FILE = "app.prefs.json";
 
+const VAULT_BACKUP_1 = "vault.enc.json.bak.1";
+const VAULT_BACKUP_2 = "vault.enc.json.bak.2";
+const VAULT_BACKUP_3 = "vault.enc.json.bak.3";
+
 /** Allowlisted file names that may be read/written via IPC. */
 const SAFE_FILES = new Set([
   VAULT_FILE,
   VAULT_BACKUP_FILE,
+  VAULT_BACKUP_1,
+  VAULT_BACKUP_2,
+  VAULT_BACKUP_3,
   VAULT_TEMP_FILE,
   PREFS_FILE,
   "lan-pairing.json",
@@ -52,6 +59,36 @@ function ensureDataDir(app) {
   if (!fs.existsSync(dir)) {
     fs.mkdirSync(dir, { recursive: true });
   }
+
+  // Legacy data migration: If current dir has no vault, check older Password Manager folders.
+  const currentVault = path.join(dir, VAULT_FILE);
+  if (!fs.existsSync(currentVault)) {
+    try {
+      const appData = app.getPath("appData");
+      const legacyDirs = [
+        path.join(appData, "Password Manager"),
+        path.join(appData, "password-manager-system"),
+      ];
+      for (const leg of legacyDirs) {
+        const legVault = path.join(leg, VAULT_FILE);
+        if (fs.existsSync(legVault)) {
+          // Copy vault and relevant config files
+          for (const item of fs.readdirSync(leg)) {
+            const src = path.join(leg, item);
+            const dst = path.join(dir, item);
+            if (!fs.existsSync(dst) && fs.statSync(src).isFile()) {
+              fs.copyFileSync(src, dst);
+            }
+          }
+          console.log(`[SecureX] Migrated existing vault data from: ${leg}`);
+          break;
+        }
+      }
+    } catch (e) {
+      console.warn("[SecureX] Data migration check encountered an error:", e);
+    }
+  }
+
   return dir;
 }
 
@@ -114,7 +151,17 @@ function saveVault(app, content) {
   }
   const current = readText(app, VAULT_FILE);
   if (current && isValidVaultEnvelope(current)) {
-    writeText(app, VAULT_BACKUP_FILE, current);
+    try {
+      const b2 = readText(app, VAULT_BACKUP_2);
+      if (b2) writeText(app, VAULT_BACKUP_3, b2);
+      const b1 = readText(app, VAULT_BACKUP_1);
+      if (b1) writeText(app, VAULT_BACKUP_2, b1);
+      const bak = readText(app, VAULT_BACKUP_FILE);
+      if (bak) writeText(app, VAULT_BACKUP_1, bak);
+      writeText(app, VAULT_BACKUP_FILE, current);
+    } catch {
+      writeText(app, VAULT_BACKUP_FILE, current);
+    }
   }
   writeText(app, VAULT_TEMP_FILE, content);
   writeText(app, VAULT_FILE, content);

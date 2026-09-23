@@ -32,16 +32,21 @@ function isValidVaultEnvelope(raw: string): boolean {
   }
 }
 
+const memoryStorage = new Map<string, string>();
+
 function useElectronStorage(): boolean {
   return isDesktopApp() && !!window.electronAPI?.readDataFile;
 }
 
-async function readDataFile(path: string): Promise<string | null> {
+export async function readDataFile(path: string): Promise<string | null> {
   if (useElectronStorage()) {
     return window.electronAPI!.readDataFile(path);
   }
   if (!Capacitor.isNativePlatform()) {
-    return sessionStorage.getItem(path);
+    if (typeof sessionStorage !== "undefined") {
+      return sessionStorage.getItem(path);
+    }
+    return memoryStorage.get(path) ?? null;
   }
   try {
     const result = await Filesystem.readFile({
@@ -55,13 +60,17 @@ async function readDataFile(path: string): Promise<string | null> {
   }
 }
 
-async function writeDataFile(path: string, content: string): Promise<void> {
+export async function writeDataFile(path: string, content: string): Promise<void> {
   if (useElectronStorage()) {
     await window.electronAPI!.writeDataFile(path, content);
     return;
   }
   if (!Capacitor.isNativePlatform()) {
-    sessionStorage.setItem(path, content);
+    if (typeof sessionStorage !== "undefined") {
+      sessionStorage.setItem(path, content);
+    } else {
+      memoryStorage.set(path, content);
+    }
     return;
   }
   await Filesystem.writeFile({
@@ -72,13 +81,17 @@ async function writeDataFile(path: string, content: string): Promise<void> {
   });
 }
 
-async function deleteDataFile(path: string): Promise<void> {
+export async function deleteDataFile(path: string): Promise<void> {
   if (useElectronStorage()) {
     await window.electronAPI!.deleteDataFile(path);
     return;
   }
   if (!Capacitor.isNativePlatform()) {
-    sessionStorage.removeItem(path);
+    if (typeof sessionStorage !== "undefined") {
+      sessionStorage.removeItem(path);
+    } else {
+      memoryStorage.delete(path);
+    }
     return;
   }
   try {

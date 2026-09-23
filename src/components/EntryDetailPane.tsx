@@ -9,6 +9,9 @@ import {
 import { colorForId } from "@/shared/people";
 import type { Person, VaultEntry } from "@/shared/types";
 import { PersonAvatar, ServiceIcon } from "./ServiceIcon";
+import { TotpDisplay } from "./TotpDisplay";
+import { CustomFieldsDisplay } from "./CustomFields";
+import { PasswordHistoryViewer } from "./PasswordHistoryViewer";
 
 interface EntryDetailPaneProps {
   entry: VaultEntry | null;
@@ -117,9 +120,12 @@ export function EntryDetailPane({
         <div className="detail-col" style={{ display: "flex", flexDirection: "column", gap: "20px" }}>
           <DetailRow label="Username" value={e.username} />
           <DetailRow label="Password" value={e.password} secret />
+          {e.totpSeed && <TotpDisplay secret={e.totpSeed} />}
+          <PasswordHistoryViewer history={e.passwordHistory} />
         </div>
         <div className="detail-col" style={{ display: "flex", flexDirection: "column", gap: "20px" }}>
           <DetailRow label="URL" value={e.url} />
+          <CustomFieldsDisplay fields={e.customFields} />
           {e.notes && (
             <div className="detail-row">
               <span className="detail-row-label">Notes</span>

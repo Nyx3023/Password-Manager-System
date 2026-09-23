@@ -7,3 +7,6 @@ android/
 .idea/
 local.properties
 dist-electron/
+.env
+.env.local
+.env.*.local

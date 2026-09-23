@@ -30,6 +30,7 @@ import type {
   KeyWrap,
   Person,
   PersonCategoryId,
+  TrashEntry,
   VaultEntry,
   VaultPayload,
 } from "./types";
@@ -39,7 +40,15 @@ function nowIso(): string {
 }
 
 function emptyPayload(): VaultPayload {
-  return { version: 2, people: [], entries: [] };
+  return {
+    version: 2,
+    vaultId: crypto.randomUUID(),
+    people: [],
+    entries: [],
+    deletedEntries: [],
+    deletedPeople: [],
+    trashEntries: [],
+  };
 }
 
 const DEFAULT_KDF = {
@@ -61,7 +70,11 @@ function parseEncryptedFile(raw: string): EncryptedVaultFile {
   if (obj.version === 2 && typeof obj.master === "object") {
     // Strip legacy mpin field if present (migrated to device-local storage).
     const { mpin: _mpin, ...rest } = obj as Record<string, unknown>;
-    return rest as unknown as EncryptedVaultFile;
+    const file = rest as unknown as EncryptedVaultFile;
+    if (typeof obj.vaultId === "string") {
+      file.vaultId = obj.vaultId;
+    }
+    return file;
   }
 
   if (obj.version === 1) {
@@ -136,8 +149,16 @@ export class VaultService {
     return this.payload !== null && this.vaultKey !== null;
   }
 
+  get vaultId(): string | undefined {
+    return this.payload?.vaultId || this.file?.vaultId;
+  }
+
   get entries(): VaultEntry[] {
     return this.payload?.entries ?? [];
+  }
+
+  get trashEntries(): TrashEntry[] {
+    return this.payload?.trashEntries ?? [];
   }
 
   get people(): Person[] {
@@ -158,8 +179,9 @@ export class VaultService {
   }
 
   async createVault(masterPassword: string): Promise<void> {
+    const vId = crypto.randomUUID();
     this.vaultKey = generateVaultKey();
-    this.payload = emptyPayload();
+    this.payload = { ...emptyPayload(), vaultId: vId };
     const master = await buildMasterWrap(masterPassword, this.vaultKey);
     const encrypted = await encryptPayload(
       this.vaultKey,
@@ -167,6 +189,7 @@ export class VaultService {
     );
     this.file = {
       version: 2,
+      vaultId: vId,
       kdf: "argon2id",
       cipher: "aes-256-gcm",
       master,
@@ -287,7 +310,19 @@ export class VaultService {
   lock(): void {
     if (this.vaultKey) this.vaultKey.fill(0);
     this.vaultKey = null;
-    this.payload = null;
+    if (this.payload) {
+      for (const e of this.payload.entries) {
+        e.password = "";
+        e.notes = "";
+        if (e.totpSeed) e.totpSeed = "";
+      }
+      for (const t of this.payload.trashEntries || []) {
+        t.password = "";
+        t.notes = "";
+        if (t.totpSeed) t.totpSeed = "";
+      }
+      this.payload = null;
+    }
     this.file = null;
   }
 
@@ -385,9 +420,22 @@ export class VaultService {
     const index = this.payload!.entries.findIndex((e) => e.id === id);
     if (index === -1) throw new Error("Entry not found.");
     const existing = this.payload!.entries[index]!;
+
+    let passwordHistory = existing.passwordHistory ? [...existing.passwordHistory] : [];
+    if (input.password && existing.password && input.password !== existing.password) {
+      passwordHistory.unshift({
+        password: existing.password,
+        changedAt: nowIso(),
+      });
+      if (passwordHistory.length > 10) {
+        passwordHistory = passwordHistory.slice(0, 10);
+      }
+    }
+
     this.payload!.entries[index] = {
       ...input,
       id,
+      passwordHistory: input.passwordHistory || passwordHistory,
       createdAt: existing.createdAt,
       updatedAt: nowIso(),
     };
@@ -395,7 +443,67 @@ export class VaultService {
 
   deleteEntry(id: string): void {
     this.requireUnlocked();
-    this.payload!.entries = this.payload!.entries.filter((e) => e.id !== id);
+    const index = this.payload!.entries.findIndex((e) => e.id === id);
+    if (index === -1) return;
+    const removed = this.payload!.entries.splice(index, 1)[0]!;
+    const timestamp = nowIso();
+
+    if (!this.payload!.trashEntries) this.payload!.trashEntries = [];
+    this.payload!.trashEntries.unshift({
+      ...removed,
+      trashedAt: timestamp,
+    });
+
+    if (!this.payload!.deletedEntries) this.payload!.deletedEntries = [];
+    this.payload!.deletedEntries.push({
+      id,
+      deletedAt: timestamp,
+    });
+  }
+
+  restoreTrashEntry(id: string): VaultEntry {
+    this.requireUnlocked();
+    if (!this.payload!.trashEntries) throw new Error("Trash is empty.");
+    const index = this.payload!.trashEntries.findIndex((e) => e.id === id);
+    if (index === -1) throw new Error("Item not found in trash.");
+    const item = this.payload!.trashEntries.splice(index, 1)[0]!;
+    const { trashedAt: _trashedAt, ...cleanEntry } = item;
+    cleanEntry.updatedAt = nowIso();
+    this.payload!.entries.unshift(cleanEntry);
+
+    if (this.payload!.deletedEntries) {
+      this.payload!.deletedEntries = this.payload!.deletedEntries.filter((t) => t.id !== id);
+    }
+    return cleanEntry;
+  }
+
+  purgeTrashEntry(id: string): void {
+    this.requireUnlocked();
+    if (!this.payload!.trashEntries) return;
+    this.payload!.trashEntries = this.payload!.trashEntries.filter((e) => e.id !== id);
+    const timestamp = nowIso();
+    if (!this.payload!.deletedEntries) this.payload!.deletedEntries = [];
+    const existing = this.payload!.deletedEntries.find((t) => t.id === id);
+    if (existing) {
+      existing.deletedAt = timestamp;
+    } else {
+      this.payload!.deletedEntries.push({ id, deletedAt: timestamp });
+    }
+  }
+
+  emptyTrash(): void {
+    this.requireUnlocked();
+    const timestamp = nowIso();
+    if (!this.payload!.deletedEntries) this.payload!.deletedEntries = [];
+    for (const item of this.payload!.trashEntries || []) {
+      const existing = this.payload!.deletedEntries.find((t) => t.id === item.id);
+      if (existing) {
+        existing.deletedAt = timestamp;
+      } else {
+        this.payload!.deletedEntries.push({ id: item.id, deletedAt: timestamp });
+      }
+    }
+    this.payload!.trashEntries = [];
   }
 
   // ============================================================
@@ -441,8 +549,17 @@ export class VaultService {
 
   deletePerson(id: string): { entriesRemoved: number } {
     this.requireUnlocked();
+    const timestamp = nowIso();
     this.payload!.people = this.payload!.people.filter((p) => p.id !== id);
+    if (!this.payload!.deletedPeople) this.payload!.deletedPeople = [];
+    this.payload!.deletedPeople.push({ id, deletedAt: timestamp });
+
     const before = this.payload!.entries.length;
+    const removedEntries = this.payload!.entries.filter((e) => e.personId === id);
+    if (!this.payload!.deletedEntries) this.payload!.deletedEntries = [];
+    for (const e of removedEntries) {
+      this.payload!.deletedEntries.push({ id: e.id, deletedAt: timestamp });
+    }
     this.payload!.entries = this.payload!.entries.filter(
       (e) => e.personId !== id,
     );
@@ -456,12 +573,16 @@ export class VaultService {
     if (!this.vaultKey || !this.payload || !this.file) {
       throw new Error("Vault is locked.");
     }
+    if (!this.payload.vaultId) {
+      this.payload.vaultId = this.file.vaultId || crypto.randomUUID();
+    }
     const encrypted = await encryptPayload(
       this.vaultKey,
       JSON.stringify(this.payload),
     );
     this.file = {
       ...this.file,
+      vaultId: this.payload.vaultId,
       iv: encrypted.iv,
       ciphertext: encrypted.ciphertext,
     };
@@ -574,6 +695,57 @@ export class VaultService {
     }
     await this.save();
     return entries.length;
+  }
+
+  /**
+   * Import 2FA/TOTP authenticator accounts (e.g. Google Authenticator, Aegis, 2FAS).
+   * Matches existing entries by name/service or creates new entries.
+   */
+  async importTotpAccounts(
+    accounts: { name: string; issuer?: string; secret: string; digits?: number; period?: number }[],
+    personId: string,
+  ): Promise<number> {
+    this.requireUnlocked();
+    const timestamp = nowIso();
+    let count = 0;
+
+    for (const acc of accounts) {
+      if (!acc.secret) continue;
+      const targetName = (acc.issuer || acc.name).toLowerCase();
+      const existing = this.payload!.entries.find(
+        (e) =>
+          (e.title && e.title.toLowerCase().includes(targetName)) ||
+          (e.url && e.url.toLowerCase().includes(targetName)),
+      );
+
+      if (existing && !existing.totpSeed) {
+        existing.totpSeed = acc.secret;
+        existing.updatedAt = timestamp;
+        count++;
+      } else {
+        const newEntry: VaultEntry = {
+          id: crypto.randomUUID(),
+          title: acc.issuer ? `${acc.issuer} (${acc.name})` : acc.name,
+          personId,
+          categoryId: "other",
+          subcategoryId: "other",
+          username: acc.name.includes("@") ? acc.name : "",
+          password: "",
+          url: "",
+          notes: "Imported 2FA authenticator account",
+          totpSeed: acc.secret,
+          createdAt: timestamp,
+          updatedAt: timestamp,
+        };
+        this.payload!.entries.unshift(newEntry);
+        count++;
+      }
+    }
+
+    if (count > 0) {
+      await this.save();
+    }
+    return count;
   }
 
   private requireUnlocked(): void {

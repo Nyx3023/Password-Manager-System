@@ -1,7 +1,7 @@
 {
-  "appId": "com.passwordmanager.desktop",
-  "productName": "Password Manager",
-  "copyright": "Copyright © 2025 Password Manager",
+  "appId": "com.securex.desktop",
+  "productName": "SecureX",
+  "copyright": "Copyright © 2026 SecureX",
   "directories": {
     "buildResources": "build",
     "output": "dist-electron"
@@ -31,7 +31,7 @@
         "arch": ["x64"]
       }
     ],
-    "executableName": "PasswordManager",
+    "executableName": "SecureX",
     "icon": "build/icon.ico"
   },
   "nsis": {

@@ -20,6 +20,154 @@
   border-radius: var(--radius);
 }
 
+.desktop-auth-card:has(.setup-wizard--desktop) {
+  width: min(880px, 94vw);
+  max-width: 900px;
+  padding: 2.25rem;
+}
+
+/* PC 2-Column Split Layout for SetupWizard */
+.setup-wizard--desktop {
+  width: 100%;
+  min-height: unset;
+  padding: 0;
+  display: block;
+}
+
+.setup-desktop-container {
+  display: grid;
+  grid-template-columns: 300px 1fr;
+  gap: 2.25rem;
+  align-items: stretch;
+  width: 100%;
+}
+
+.setup-desktop-sidebar {
+  display: flex;
+  flex-direction: column;
+  justify-content: space-between;
+  padding-right: 2rem;
+  border-right: 1px solid var(--border);
+  gap: 1.5rem;
+}
+
+.setup-desktop-brand-box {
+  display: flex;
+  flex-direction: column;
+  align-items: flex-start;
+  gap: 4px;
+}
+
+.setup-desktop-brand-box .vault-logo-badge.small {
+  font-size: 2.2rem;
+  margin-bottom: 0.25rem;
+  animation: floatLock 4s ease-in-out infinite;
+}
+
+.setup-desktop-tagline {
+  font-size: 0.72rem;
+  color: var(--muted);
+  letter-spacing: 0.05em;
+  text-transform: uppercase;
+  margin: 0;
+}
+
+.setup-desktop-timeline {
+  display: flex;
+  flex-direction: column;
+  gap: 1.25rem;
+  margin: 0.5rem 0;
+}
+
+.timeline-item {
+  display: flex;
+  align-items: center;
+  gap: 12px;
+  opacity: 0.45;
+  transition: opacity 0.25s ease, transform 0.25s ease;
+}
+
+.timeline-item.active {
+  opacity: 1;
+  transform: translateX(4px);
+}
+
+.timeline-item.done {
+  opacity: 0.85;
+}
+
+.timeline-node {
+  width: 28px;
+  height: 28px;
+  border-radius: 50%;
+  border: 1.5px solid var(--border);
+  background: var(--bg-elevated);
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  font-size: 0.75rem;
+  font-weight: 700;
+  color: var(--text);
+  flex-shrink: 0;
+}
+
+.timeline-item.active .timeline-node {
+  border-color: var(--accent);
+  color: var(--accent);
+  background: rgba(255, 68, 56, 0.12);
+  box-shadow: 0 0 12px rgba(255, 68, 56, 0.35);
+}
+
+.timeline-item.done .timeline-node {
+  border-color: #34A853;
+  color: #34A853;
+  background: rgba(52, 168, 83, 0.12);
+}
+
+.timeline-content {
+  display: flex;
+  flex-direction: column;
+}
+
+.timeline-title {
+  font-size: 0.86rem;
+  font-weight: 600;
+  color: var(--text);
+}
+
+.timeline-sub {
+  font-size: 0.72rem;
+  color: var(--muted);
+}
+
+.setup-desktop-security-badge {
+  display: flex;
+  align-items: flex-start;
+  gap: 10px;
+  padding: 12px;
+  background: rgba(255, 255, 255, 0.03);
+  border: 1px solid var(--border);
+  border-radius: var(--radius);
+}
+
+.security-badge-icon {
+  font-size: 1.3rem;
+  flex-shrink: 0;
+}
+
+.setup-desktop-main {
+  display: flex;
+  flex-direction: column;
+  justify-content: center;
+  min-height: 440px;
+}
+
+.setup-desktop-main .setup-body {
+  max-width: 100%;
+  padding: 0;
+  width: 100%;
+}
+
 /* PC Split Layout for UnlockScreen */
 .unlock-desktop-split {
   display: grid;

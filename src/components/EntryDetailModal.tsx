@@ -9,6 +9,9 @@ import { colorForId } from "@/shared/people";
 import type { Person, VaultEntry } from "@/shared/types";
 import { Modal } from "./Modal";
 import { PersonAvatar, ServiceIcon } from "./ServiceIcon";
+import { TotpDisplay } from "./TotpDisplay";
+import { CustomFieldsDisplay } from "./CustomFields";
+import { PasswordHistoryViewer } from "./PasswordHistoryViewer";
 
 interface EntryDetailModalProps {
   entry: VaultEntry | null;
@@ -109,7 +112,10 @@ export function EntryDetailModal({
           secret
           onCopy={onCopy}
         />
+        {e.totpSeed && <TotpDisplay secret={e.totpSeed} onCopyNotice={(m) => onCopy("2FA Code", m)} />}
+        <PasswordHistoryViewer history={e.passwordHistory} />
         <DetailRow label="URL" value={e.url} onCopy={onCopy} />
+        <CustomFieldsDisplay fields={e.customFields} />
         {e.notes && (
           <div className="detail-row">
             <span className="detail-row-label">Notes</span>

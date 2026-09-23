@@ -2,11 +2,16 @@ import { useState } from "react";
 import { MpinPad } from "./MpinPad";
 
 interface MpinConfirmFlowProps {
-  size?: "default" | "large";
+  size?: "default" | "large" | "desktop" | "wide-mobile";
+  collapsibleKeypad?: boolean;
   onComplete: (mpin: string) => void;
 }
 
-export function MpinConfirmFlow({ size = "default", onComplete }: MpinConfirmFlowProps) {
+export function MpinConfirmFlow({
+  size = "default",
+  collapsibleKeypad,
+  onComplete,
+}: MpinConfirmFlowProps) {
   const [phase, setPhase] = useState<"enter" | "confirm">("enter");
   const [entry, setEntry] = useState("");
   const [draft, setDraft] = useState("");
@@ -38,6 +43,7 @@ export function MpinConfirmFlow({ size = "default", onComplete }: MpinConfirmFlo
       </p>
       <MpinPad
         size={size}
+        collapsibleKeypad={collapsibleKeypad}
         value={entry}
         onChange={setEntry}
         onComplete={handleComplete}

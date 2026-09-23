@@ -125,6 +125,18 @@ export const CATEGORIES: Category[] = [
     ],
   },
   {
+    id: "authenticator",
+    name: "Authenticator",
+    emoji: "🔐",
+    subcategories: [
+      { id: "totp", name: "2FA Account", emoji: "⏱️", color: "10B981" },
+      { id: "google-auth", name: "Google", emoji: "🇬", color: "4285F4" },
+      { id: "github-auth", name: "GitHub", emoji: "🐙", color: "24292F" },
+      { id: "microsoft-auth", name: "Microsoft", emoji: "🪟", color: "0078D4" },
+      { id: "custom-auth", name: "Custom 2FA", emoji: "🛡️", color: "059669" },
+    ],
+  },
+  {
     id: "other",
     name: "Other",
     emoji: "📁",

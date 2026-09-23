@@ -1,6 +1,7 @@
 import { FormEvent, useEffect, useState, type ReactNode } from "react";
 import { autofillSupported, VaultAutofill } from "@/shared/vaultAutofill";
-import type { ImportMode, Person, PersonCategoryId } from "@/shared/types";
+import type { ImportMode, Person, PersonCategoryId, TrashEntry } from "@/shared/types";
+import type { TotpAccount } from "@/shared/totp";
 import {
   exportVaultToDevice,
   pickVaultImportFile,
@@ -10,15 +11,16 @@ import { Modal } from "./Modal";
 import { MpinConfirmFlow } from "./MpinConfirmFlow";
 import { PasswordRequirements } from "./PasswordRequirements";
 import { PeopleManager } from "./PeopleManager";
+import { TrashBinModal } from "./TrashBinModal";
+import { TotpImporterModal } from "./TotpImporterModal";
 import { validateMasterPassword } from "@/shared/passwordPolicy";
-import { isLanPaired } from "@/shared/lanSync";
-import { formatLastSync } from "@/shared/syncTime";
-import {
-  DesktopLanPanel,
-  type DesktopLanPanelProps,
-} from "@/desktop/DesktopLanPanel";
 import { DesktopExtensionPanel } from "@/desktop/DesktopExtensionPanel";
-import { useTheme } from "@/hooks/useTheme";
+import { GoogleDriveSyncModal } from "./GoogleDriveSyncModal";
+import {
+  subscribeCloudSyncConfig,
+  type GoogleDriveConfig,
+  type VaultSyncTarget,
+} from "@/shared/cloudSync";
 
 type SettingsModal =
   | "people"
@@ -27,6 +29,9 @@ type SettingsModal =
   | "backup"
   | "csv"
   | "autofill"
+  | "trash"
+  | "totp"
+  | "gdrive"
   | null;
 
 interface SettingsScreenProps {
@@ -64,18 +69,12 @@ interface SettingsScreenProps {
   onImportChromeCsv: (csv: string, personId: string) => Promise<number>;
   onMessage: (message: string) => void;
   onResetApp?: () => Promise<boolean>;
-  onPullFromPc?: (
-    host: string,
-    port: number,
-  ) => Promise<{ ok: boolean; message: string }>;
-  onPushToPc?: (
-    host: string,
-    port: number,
-    force?: boolean,
-  ) => Promise<{ ok: boolean; message: string }>;
-  onOpenLanSync?: () => void;
-  lanLastSyncAt?: string | null;
-  desktopLan?: DesktopLanPanelProps;
+  trashEntries?: TrashEntry[];
+  onRestoreTrash?: (id: string) => Promise<unknown>;
+  onPurgeTrash?: (id: string) => Promise<unknown>;
+  onEmptyTrash?: () => Promise<unknown>;
+  onImportTotp?: (accounts: TotpAccount[], personId: string) => Promise<number>;
+  vaultTarget?: VaultSyncTarget;
 }
 
 function SettingsRow({
@@ -109,7 +108,7 @@ function SettingsRow({
         <span className="settings-row-label">{label}</span>
         {hint && <span className="settings-row-hint">{hint}</span>}
       </span>
-      {trailing}
+      {trailing && <span className="settings-row-trailing">{trailing}</span>}
     </div>
   );
 }
@@ -117,11 +116,23 @@ function SettingsRow({
 export function SettingsScreen(props: SettingsScreenProps) {
   const [modal, setModal] = useState<SettingsModal>(null);
   const [autofillEnabled, setAutofillEnabled] = useState(false);
-  const { theme, setTheme } = useTheme();
+  const [cloudConfig, setCloudConfig] = useState<GoogleDriveConfig | null>(null);
+
+  useEffect(() => {
+    return subscribeCloudSyncConfig((cfg) => setCloudConfig(cfg));
+  }, []);
 
   useEffect(() => {
     if (!autofillSupported()) return;
     void VaultAutofill.isEnabled().then(({ enabled }) => setAutofillEnabled(enabled));
+  }, []);
+
+  const [autoStart, setAutoStart] = useState(false);
+
+  useEffect(() => {
+    if (window.electronAPI?.getAutoStart) {
+      void window.electronAPI.getAutoStart().then((enabled) => setAutoStart(enabled));
+    }
   }, []);
 
   const [currentPw, setCurrentPw] = useState("");
@@ -190,18 +201,9 @@ export function SettingsScreen(props: SettingsScreenProps) {
     if (done) props.onMessage("App reset. First-time setup will start.");
   };
 
-  const showPhoneLanSync =
-    props.onPullFromPc && props.onPushToPc && !props.desktopLan;
-
   return (
     <div className="settings">
-      {props.desktopLan && (
-        <div className="settings-span-full">
-          <DesktopLanPanel {...props.desktopLan} />
-        </div>
-      )}
-
-      {props.desktopLan && (
+      {window.electronAPI && (
         <div className="settings-span-full">
           <DesktopExtensionPanel />
         </div>
@@ -229,39 +231,50 @@ export function SettingsScreen(props: SettingsScreenProps) {
           hint="Export or import .pms file"
           onClick={() => setModal("backup")}
         />
+        {props.vaultTarget && (
+          <SettingsRow
+            label="Google Drive Sync"
+            hint={
+              cloudConfig?.enabled && cloudConfig?.userEmail
+                ? `Connected (${cloudConfig.userEmail})`
+                : "Zero-knowledge cloud sync & backup"
+            }
+            onClick={() => setModal("gdrive")}
+          />
+        )}
         <SettingsRow
           label="Chrome passwords"
           hint="Import from CSV export"
           onClick={() => setModal("csv")}
         />
-        {showPhoneLanSync && (
+        <SettingsRow
+          label="Trash & Recycle bin"
+          hint={props.trashEntries?.length ? `${props.trashEntries.length} deleted items` : "Empty"}
+          onClick={() => setModal("trash")}
+        />
+        <SettingsRow
+          label="Import 2FA accounts"
+          hint="Google Authenticator, Aegis, 2FAS, URI"
+          onClick={() => setModal("totp")}
+        />
+        {window.electronAPI?.setAutoStart && (
           <SettingsRow
-            label="Sync with PC"
-            hint={
-              isLanPaired()
-                ? `Last sync ${formatLastSync(props.lanLastSyncAt ?? null)}`
-                : "Scan for PC on same Wi-Fi"
+            label="Launch on system startup"
+            hint={autoStart ? "Enabled (starts in tray)" : "Disabled"}
+            trailing={
+              <button
+                type="button"
+                className={`toggle${autoStart ? " on" : ""}`}
+                aria-pressed={autoStart}
+                onClick={async () => {
+                  const next = !autoStart;
+                  const res = await window.electronAPI!.setAutoStart(next);
+                  setAutoStart(res);
+                }}
+              />
             }
-            onClick={() => props.onOpenLanSync?.()}
           />
         )}
-      </section>
-
-      <section className="settings-group">
-        <SettingsRow
-          label="Appearance"
-          hint="App theme style"
-          trailing={
-            <select
-              value={theme}
-              onChange={(e) => setTheme(e.target.value as "nothing" | "ios-glass")}
-              style={{ width: "auto", padding: "8px 12px", minWidth: 140 }}
-            >
-              <option value="nothing">Nothing OS</option>
-              <option value="ios-glass">iOS Glass</option>
-            </select>
-          }
-        />
       </section>
 
       {autofillSupported() && (
@@ -278,18 +291,16 @@ export function SettingsScreen(props: SettingsScreenProps) {
         </section>
       )}
 
-      <section className="settings-group">
-        <SettingsRow
-          label="Biometric unlock"
-          hint={
-            !props.biometricsAvailable
-              ? "Not available"
-              : props.biometricsEnabled
+      {!window.electronAPI && props.biometricsAvailable && (
+        <section className="settings-group">
+          <SettingsRow
+            label="Biometric unlock"
+            hint={
+              props.biometricsEnabled
                 ? "Enabled"
                 : "Disabled"
-          }
-          trailing={
-            props.biometricsAvailable ? (
+            }
+            trailing={
               <button
                 type="button"
                 className={`toggle${props.biometricsEnabled ? " on" : ""}`}
@@ -301,10 +312,10 @@ export function SettingsScreen(props: SettingsScreenProps) {
                     : void props.onEnableBiometrics()
                 }
               />
-            ) : null
-          }
-        />
-      </section>
+            }
+          />
+        </section>
+      )}
 
       {props.onResetApp && (
         <section className="settings-group settings-group--dev">
@@ -482,6 +493,35 @@ export function SettingsScreen(props: SettingsScreenProps) {
           onMessage={props.onMessage}
         />
       </Modal>
+
+      {modal === "trash" && props.onRestoreTrash && props.onPurgeTrash && props.onEmptyTrash && (
+        <TrashBinModal
+          trashEntries={props.trashEntries || []}
+          onRestore={props.onRestoreTrash}
+          onPurge={props.onPurgeTrash}
+          onEmptyTrash={props.onEmptyTrash}
+          onClose={closeModal}
+          onMessage={props.onMessage}
+        />
+      )}
+
+      {modal === "totp" && props.onImportTotp && (
+        <TotpImporterModal
+          people={props.people}
+          onImport={props.onImportTotp}
+          onClose={closeModal}
+          onMessage={props.onMessage}
+        />
+      )}
+
+      {props.vaultTarget && (
+        <GoogleDriveSyncModal
+          open={modal === "gdrive"}
+          vaultTarget={props.vaultTarget}
+          onClose={closeModal}
+          onMessage={props.onMessage}
+        />
+      )}
 
     </div>
   );

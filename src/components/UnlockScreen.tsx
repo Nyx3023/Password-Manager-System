@@ -1,6 +1,7 @@
 import { FormEvent, useCallback, useEffect, useRef, useState } from "react";
 import { LoadingIndicator } from "./LoadingIndicator";
 import { MpinPad } from "./MpinPad";
+import { useBackHandler } from "@/shared/backButton";
 
 type UnlockMode = "mpin" | "recovery";
 
@@ -12,7 +13,7 @@ interface UnlockScreenProps {
   mpinEnabled: boolean;
   onUnlockPassword: (password: string) => Promise<boolean>;
   onUnlockMpin: (mpin: string) => Promise<boolean>;
-  onUnlockBiometric: () => Promise<boolean>;
+  onUnlockBiometric?: () => Promise<boolean>;
   onRestoreBackup: (content: string, password: string) => Promise<boolean>;
   onResetApp?: () => Promise<boolean>;
   /** Desktop: compact card layout instead of full-screen mobile. */
@@ -32,7 +33,7 @@ export function UnlockScreen({
   layout = "mobile",
 }: UnlockScreenProps) {
   const isDesktop = layout === "desktop";
-  const canUseBiometric = biometricsEnabled && biometricsAvailable;
+  const canUseBiometric = Boolean(biometricsEnabled && biometricsAvailable && onUnlockBiometric);
 
   const [mode, setMode] = useState<UnlockMode>(() =>
     mpinEnabled ? "mpin" : "recovery",
@@ -41,11 +42,19 @@ export function UnlockScreen({
   const [mpinErrorFlash, setMpinErrorFlash] = useState(false);
   const [password, setPassword] = useState("");
 
+  useBackHandler(() => {
+    if (mode === "recovery" && mpinEnabled) {
+      setMode("mpin");
+      return true;
+    }
+    return false;
+  }, mode === "recovery" && mpinEnabled);
+
   const bioPrompted = useRef(false);
 
   const tryBiometricUnlock = useCallback(async () => {
     if (busy || !canUseBiometric) return;
-    await onUnlockBiometric();
+    await onUnlockBiometric?.();
   }, [busy, canUseBiometric, onUnlockBiometric]);
 
   useEffect(() => {
