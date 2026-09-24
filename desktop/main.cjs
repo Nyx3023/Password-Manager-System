@@ -45,9 +45,77 @@ function viteDevServerUp() {
   });
 }
 
+let staticServer = null;
+let staticServerPort = 0;
+
+function startStaticServer() {
+  return new Promise((resolve) => {
+    if (staticServerPort > 0) {
+      resolve(staticServerPort);
+      return;
+    }
+
+    const mimeTypes = {
+      ".html": "text/html",
+      ".js": "text/javascript",
+      ".css": "text/css",
+      ".json": "application/json",
+      ".png": "image/png",
+      ".jpg": "image/jpeg",
+      ".svg": "image/svg+xml",
+      ".wasm": "application/wasm",
+    };
+
+    const distRoot = path.join(__dirname, "..", "dist");
+
+    staticServer = http.createServer((req, res) => {
+      try {
+        const parsedUrl = new URL(req.url, "http://localhost");
+        let safePath = path.normalize(decodeURIComponent(parsedUrl.pathname));
+        if (safePath === "/" || safePath === "\\") safePath = "/index.html";
+        const filePath = path.join(distRoot, safePath);
+
+        if (!filePath.startsWith(distRoot)) {
+          res.writeHead(403);
+          res.end();
+          return;
+        }
+
+        fs.readFile(filePath, (err, data) => {
+          if (err) {
+            // SPA fallback
+            fs.readFile(path.join(distRoot, "index.html"), (err2, fallback) => {
+              if (err2) {
+                res.writeHead(404);
+                res.end("Not Found");
+              } else {
+                res.writeHead(200, { "Content-Type": "text/html; charset=utf-8" });
+                res.end(fallback);
+              }
+            });
+            return;
+          }
+          const ext = path.extname(filePath).toLowerCase();
+          res.writeHead(200, { "Content-Type": mimeTypes[ext] || "application/octet-stream" });
+          res.end(data);
+        });
+      } catch {
+        res.writeHead(500);
+        res.end();
+      }
+    });
+
+    staticServer.listen(0, "127.0.0.1", () => {
+      staticServerPort = staticServer.address().port;
+      resolve(staticServerPort);
+    });
+  });
+}
+
 async function loadRenderer() {
   if (!isDev) {
-    await mainWindow.loadFile(DIST_INDEX);
+    const port = await startStaticServer();
+    await mainWindow.loadURL(`http://localhost:${port}/`);
     return;
   }
 
@@ -59,9 +127,10 @@ async function loadRenderer() {
 
   if (fs.existsSync(DIST_INDEX)) {
     console.warn(
-      "[Password Manager] Vite is not running. Loaded dist/ instead. For hot reload use: npm run electron:dev",
+      "[Password Manager] Vite is not running. Loaded dist/ via local server.",
     );
-    await mainWindow.loadFile(DIST_INDEX);
+    const port = await startStaticServer();
+    await mainWindow.loadURL(`http://localhost:${port}/`);
     return;
   }
 
@@ -160,6 +229,28 @@ function createWindow() {
   });
 
   mainWindow.once("ready-to-show", () => {
+    // Strip Electron marker from user agent so Google OAuth allows sign-in popups
+    const originalUa = mainWindow.webContents.getUserAgent();
+    const cleanUa = originalUa.replace(/Electron\/[0-9\.]+\s?/, "");
+    mainWindow.webContents.setUserAgent(cleanUa);
+
+    // Handle authentication popups cleanly
+    mainWindow.webContents.setWindowOpenHandler(({ url }) => {
+      return {
+        action: "allow",
+        overrideBrowserWindowOptions: {
+          width: 500,
+          height: 650,
+          autoHideMenuBar: true,
+          webPreferences: {
+            nodeIntegration: false,
+            contextIsolation: true,
+            userAgent: cleanUa,
+          },
+        },
+      };
+    });
+
     mainWindow.show();
   });
 
@@ -270,10 +361,10 @@ function registerIpc() {
     return app.getLoginItemSettings().openAtLogin;
   });
 
-  // --- Google Drive OAuth Loopback Server ---
+  // --- Google Sign-In via System Browser (Chrome / Edge) ---
   let activeOAuthServer = null;
 
-  ipcMain.handle("google:start-auth", async (_e, { authUrlTemplate }) => {
+  ipcMain.handle("google:system-browser-auth", async (_e, { firebaseConfig }) => {
     if (activeOAuthServer) {
       try {
         activeOAuthServer.close();
@@ -282,78 +373,194 @@ function registerIpc() {
     }
 
     return new Promise((resolve, reject) => {
+      let serverPort = 0;
+
       const server = http.createServer((req, res) => {
         try {
-          const reqUrl = new URL(req.url, `http://${req.headers.host || "127.0.0.1"}`);
-          if (reqUrl.pathname === "/oauth2callback") {
-            const code = reqUrl.searchParams.get("code");
-            const error = reqUrl.searchParams.get("error");
+          const reqUrl = new URL(req.url, `http://localhost:${serverPort}`);
+
+          if (req.method === "GET" && reqUrl.pathname === "/") {
+            const html = `<!DOCTYPE html>
+<html>
+<head>
+  <meta charset="utf-8">
+  <title>SecureX — Google Sign-In</title>
+  <meta name="viewport" content="width=device-width, initial-scale=1">
+  <style>
+    body {
+      font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, sans-serif;
+      background: #000000;
+      color: #e6edf3;
+      display: flex;
+      align-items: center;
+      justify-content: center;
+      min-height: 100vh;
+      margin: 0;
+    }
+    .card {
+      background: #111111;
+      border: 1px solid #333333;
+      border-radius: 12px;
+      padding: 2.5rem;
+      text-align: center;
+      max-width: 440px;
+      width: 90%;
+      box-shadow: 0 12px 36px rgba(0,0,0,0.7);
+    }
+    h2 { color: #ffffff; margin: 0 0 10px; font-size: 22px; font-weight: 600; }
+    p { font-size: 14px; color: #888888; line-height: 1.5; margin: 0 0 24px; }
+    .btn {
+      background: #ffffff;
+      color: #000000;
+      border: none;
+      padding: 12px 24px;
+      border-radius: 8px;
+      font-size: 15px;
+      font-weight: 600;
+      cursor: pointer;
+      display: inline-flex;
+      align-items: center;
+      gap: 12px;
+      transition: background 0.15s;
+    }
+    .btn:hover { background: #e0e0e0; }
+    .status-box { margin-top: 16px; font-size: 13px; color: #aaaaaa; }
+  </style>
+  <script type="module">
+    import { initializeApp } from 'https://www.gstatic.com/firebasejs/10.12.0/firebase-app.js';
+    import { getAuth, GoogleAuthProvider, signInWithPopup } from 'https://www.gstatic.com/firebasejs/10.12.0/firebase-auth.js';
+
+    const config = ${JSON.stringify(firebaseConfig)};
+    const app = initializeApp(config);
+    const auth = getAuth(app);
+    const provider = new GoogleAuthProvider();
+    provider.addScope('openid');
+    provider.addScope('email');
+    provider.addScope('profile');
+
+    async function startAuth() {
+      const btn = document.getElementById('auth-btn');
+      const status = document.getElementById('status');
+      if (btn) btn.disabled = true;
+      if (status) status.innerText = 'Connecting to Google...';
+
+      try {
+        const cred = await signInWithPopup(auth, provider);
+        const googleCred = GoogleAuthProvider.credentialFromResult(cred);
+        const googleIdToken = (googleCred && googleCred.idToken) || (cred._tokenResponse && cred._tokenResponse.oauthIdToken) || null;
+        const googleAccessToken = (googleCred && googleCred.accessToken) || (cred._tokenResponse && cred._tokenResponse.oauthAccessToken) || null;
+        
+        document.getElementById('card-body').innerHTML = 
+          '<div style="font-size: 42px; margin-bottom: 12px;">✅</div>' +
+          '<h2>Signed In!</h2>' +
+          '<p style="color:#2ea043; font-weight:500;">Authenticated as ' + cred.user.email + '</p>' +
+          '<p style="color:#888;">You can close this tab and return to SecureX.</p>';
+
+        await fetch('/callback', {
+          method: 'POST',
+          headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify({
+            ok: true,
+            googleIdToken,
+            googleAccessToken,
+            email: cred.user.email,
+            displayName: cred.user.displayName,
+            photoURL: cred.user.photoURL,
+            uid: cred.user.uid,
+          })
+        });
+
+        setTimeout(() => window.close(), 1500);
+      } catch (err) {
+        if (btn) btn.disabled = false;
+        if (status) {
+          const isBlocked = err && (err.code === 'auth/popup-blocked' || (err.message && err.message.includes('popup-blocked')));
+          const msg = isBlocked
+            ? 'Popup was blocked by your browser. Please allow popups for localhost and click Continue with Google again.'
+            : (err.message || err);
+          status.innerHTML = '<span style="color:#f85149;">' + msg + '</span><br><br><span style="color:#888;">Click Continue with Google to try again.</span>';
+        }
+      }
+    }
+
+    window.startAuth = startAuth;
+  </script>
+</head>
+<body>
+  <div class="card" id="card-body">
+    <div style="font-size: 38px; margin-bottom: 12px;">🔐</div>
+    <h2>Sign in to SecureX</h2>
+    <p>Choose the Google account you are already signed into in this browser:</p>
+    <button type="button" class="btn" id="auth-btn" onclick="startAuth()">
+      <svg width="18" height="18" viewBox="0 0 24 24">
+        <path fill="#4285F4" d="M23.745 12.27c0-.7-.06-1.4-.19-2.07H12v4.51h6.6c-.29 1.52-1.14 2.82-2.4 3.68v3.05h3.88c2.27-2.09 3.665-5.17 3.665-9.17z"/>
+        <path fill="#34A853" d="M12 24c3.24 0 5.95-1.08 7.93-2.91l-3.88-3.05c-1.08.72-2.45 1.16-4.05 1.16-3.12 0-5.77-2.1-6.72-4.93H1.25v3.15C3.26 21.36 7.33 24 12 24z"/>
+        <path fill="#FBBC05" d="M5.28 14.27c-.25-.72-.38-1.49-.38-2.27s.14-1.55.38-2.27V6.58H1.25C.45 8.18 0 9.99 0 12s.45 3.82 1.25 5.42l4.03-3.15z"/>
+        <path fill="#EA4335" d="M12 4.75c1.77 0 3.35.61 4.6 1.8l3.42-3.42C17.95 1.19 15.24 0 12 0 7.33 0 3.26 2.64 1.25 6.58l4.03 3.15c.95-2.83 3.6-4.98 6.72-4.98z"/>
+      </svg>
+      <span>Continue with Google</span>
+    </button>
+    <div class="status-box" id="status"></div>
+  </div>
+</body>
+</html>`;
 
             res.writeHead(200, { "Content-Type": "text/html; charset=utf-8" });
-            if (code) {
-              res.end(`<!DOCTYPE html>
-<html>
-<head><meta charset="utf-8"><title>SecureX — Authenticated</title></head>
-<body style="font-family:system-ui,-apple-system,sans-serif;background:#0d1117;color:#c9d1d9;display:flex;align-items:center;justify-content:center;height:100vh;margin:0;">
-  <div style="text-align:center;padding:2.5rem;background:#161b22;border:1px solid #30363d;border-radius:12px;max-width:400px;box-shadow:0 8px 24px rgba(0,0,0,0.5);">
-    <div style="font-size:36px;margin-bottom:12px;">✅</div>
-    <h2 style="color:#58a6ff;margin:0 0 8px 0;font-size:20px;">Connected to SecureX</h2>
-    <p style="font-size:14px;color:#8b949e;margin:0 0 16px 0;">Authentication complete. You can close this window now and return to the SecureX application.</p>
-  </div>
-</body>
-</html>`);
-              server.close();
-              activeOAuthServer = null;
-              if (mainWindow && !mainWindow.isDestroyed()) {
-                mainWindow.show();
-                mainWindow.focus();
-              }
-              resolve({ ok: true, code, redirectUri: `http://127.0.0.1:${serverPort}/oauth2callback` });
-            } else {
-              res.end(`<!DOCTYPE html>
-<html>
-<head><meta charset="utf-8"><title>SecureX — Error</title></head>
-<body style="font-family:system-ui,-apple-system,sans-serif;background:#0d1117;color:#c9d1d9;display:flex;align-items:center;justify-content:center;height:100vh;margin:0;">
-  <div style="text-align:center;padding:2.5rem;background:#161b22;border:1px solid #da3633;border-radius:12px;max-width:400px;">
-    <div style="font-size:36px;margin-bottom:12px;">⚠️</div>
-    <h2 style="color:#f85149;margin:0 0 8px 0;">Authentication Cancelled</h2>
-    <p style="font-size:14px;color:#8b949e;">${error || "Access was not granted."}</p>
-  </div>
-</body>
-</html>`);
-              server.close();
-              activeOAuthServer = null;
-              reject(new Error(error || "Authentication cancelled"));
-            }
-          } else {
-            res.writeHead(404);
-            res.end();
+            res.end(html);
+            return;
           }
+
+          if (req.method === "POST" && reqUrl.pathname === "/callback") {
+            let body = "";
+            req.on("data", (chunk) => (body += chunk));
+            req.on("end", () => {
+              try {
+                const data = JSON.parse(body);
+                res.writeHead(200, { "Content-Type": "application/json" });
+                res.end(JSON.stringify({ ok: true }));
+
+                clearTimeout(timer);
+                server.close();
+                activeOAuthServer = null;
+
+                if (mainWindow && !mainWindow.isDestroyed()) {
+                  mainWindow.show();
+                  mainWindow.focus();
+                }
+
+                resolve(data);
+              } catch (err) {
+                res.writeHead(400);
+                res.end();
+              }
+            });
+            return;
+          }
+
+          res.writeHead(404);
+          res.end();
         } catch (err) {
           res.writeHead(500);
           res.end();
+          clearTimeout(timer);
           server.close();
           activeOAuthServer = null;
           reject(err);
         }
       });
 
-      let serverPort = 0;
       const timer = setTimeout(() => {
         try {
           server.close();
         } catch (e) {}
         activeOAuthServer = null;
-        reject(new Error("Authentication timed out after 3 minutes"));
+        reject(new Error("Google sign-in timed out"));
       }, 180000);
 
       server.listen(0, "127.0.0.1", () => {
         serverPort = server.address().port;
-        const redirectUri = `http://127.0.0.1:${serverPort}/oauth2callback`;
         activeOAuthServer = server;
-
-        const authUrl = authUrlTemplate.replace("__REDIRECT_URI__", encodeURIComponent(redirectUri));
-        shell.openExternal(authUrl);
+        shell.openExternal(`http://localhost:${serverPort}/`);
       });
 
       server.on("error", (err) => {

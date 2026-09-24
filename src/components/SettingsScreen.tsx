@@ -15,12 +15,13 @@ import { TrashBinModal } from "./TrashBinModal";
 import { TotpImporterModal } from "./TotpImporterModal";
 import { validateMasterPassword } from "@/shared/passwordPolicy";
 import { DesktopExtensionPanel } from "@/desktop/DesktopExtensionPanel";
-import { GoogleDriveSyncModal } from "./GoogleDriveSyncModal";
+import { FirebaseSyncModal } from "./FirebaseSyncModal";
+import { HoldToConfirmButton } from "./HoldToConfirmButton";
 import {
-  subscribeCloudSyncConfig,
-  type GoogleDriveConfig,
+  subscribeFirebaseSyncConfig,
+  type FirebaseSyncState,
   type VaultSyncTarget,
-} from "@/shared/cloudSync";
+} from "@/shared/firebaseSync";
 
 type SettingsModal =
   | "people"
@@ -31,7 +32,7 @@ type SettingsModal =
   | "autofill"
   | "trash"
   | "totp"
-  | "gdrive"
+  | "firebase"
   | null;
 
 interface SettingsScreenProps {
@@ -69,6 +70,8 @@ interface SettingsScreenProps {
   onImportChromeCsv: (csv: string, personId: string) => Promise<number>;
   onMessage: (message: string) => void;
   onResetApp?: () => Promise<boolean>;
+  onDeleteAccount?: () => Promise<boolean>;
+  onSwitchAccount?: () => Promise<boolean>;
   trashEntries?: TrashEntry[];
   onRestoreTrash?: (id: string) => Promise<unknown>;
   onPurgeTrash?: (id: string) => Promise<unknown>;
@@ -116,10 +119,10 @@ function SettingsRow({
 export function SettingsScreen(props: SettingsScreenProps) {
   const [modal, setModal] = useState<SettingsModal>(null);
   const [autofillEnabled, setAutofillEnabled] = useState(false);
-  const [cloudConfig, setCloudConfig] = useState<GoogleDriveConfig | null>(null);
+  const [cloudConfig, setCloudConfig] = useState<FirebaseSyncState | null>(null);
 
   useEffect(() => {
-    return subscribeCloudSyncConfig((cfg) => setCloudConfig(cfg));
+    return subscribeFirebaseSyncConfig((cfg) => setCloudConfig(cfg));
   }, []);
 
   useEffect(() => {
@@ -191,16 +194,6 @@ export function SettingsScreen(props: SettingsScreenProps) {
     }
   };
 
-  const handleReset = async () => {
-    if (!props.onResetApp) return;
-    const ok = confirm(
-      "Erase all vault data, people, passwords, and cached icons? This cannot be undone.",
-    );
-    if (!ok) return;
-    const done = await props.onResetApp();
-    if (done) props.onMessage("App reset. First-time setup will start.");
-  };
-
   return (
     <div className="settings">
       {window.electronAPI && (
@@ -233,13 +226,15 @@ export function SettingsScreen(props: SettingsScreenProps) {
         />
         {props.vaultTarget && (
           <SettingsRow
-            label="Google Drive Sync"
+            label="Google Cloud Sync"
             hint={
-              cloudConfig?.enabled && cloudConfig?.userEmail
-                ? `Connected (${cloudConfig.userEmail})`
-                : "Zero-knowledge cloud sync & backup"
+              cloudConfig?.ownerEmail
+                ? `Bound to ${cloudConfig.ownerEmail}`
+                : cloudConfig?.enabled && cloudConfig?.userEmail
+                  ? `Connected (${cloudConfig.userEmail})`
+                  : "Zero-knowledge cloud sync & real-time push"
             }
-            onClick={() => setModal("gdrive")}
+            onClick={() => setModal("firebase")}
           />
         )}
         <SettingsRow
@@ -317,16 +312,46 @@ export function SettingsScreen(props: SettingsScreenProps) {
         </section>
       )}
 
-      {props.onResetApp && (
-        <section className="settings-group settings-group--dev">
-          <button
-            type="button"
-            className="settings-row settings-row--danger"
-            onClick={() => void handleReset()}
-          >
-            <span className="settings-row-label">Reset app (dev)</span>
-            <span className="settings-row-hint">Clear data & run setup again</span>
-          </button>
+      {props.onSwitchAccount && (
+        <section className="settings-group">
+          <SettingsRow
+            label="Switch Account / Vault"
+            hint={
+              cloudConfig?.ownerEmail
+                ? `Active account: ${cloudConfig.ownerEmail}`
+                : "Switch to a different account or offline vault"
+            }
+            onClick={() => {
+              void props.onSwitchAccount?.();
+            }}
+          />
+        </section>
+      )}
+
+      {(props.onDeleteAccount || props.onResetApp) && (
+        <section className="settings-group settings-group--danger">
+          <div style={{ padding: "12px 14px 6px" }}>
+            <span style={{ color: "#ef4444", fontSize: "0.78rem", fontWeight: 700, textTransform: "uppercase", letterSpacing: "0.12em", display: "block", marginBottom: "4px" }}>
+              Danger Zone
+            </span>
+            <p className="muted small" style={{ margin: "0 0 12px", lineHeight: 1.45, fontSize: "0.82rem" }}>
+              Permanently delete this account, erase all cloud data from Firestore, and wipe all local passwords on this device.
+            </p>
+            <HoldToConfirmButton
+              label="Hold to Delete Account & Passwords"
+              activeLabel="Keep holding to delete…"
+              durationMs={3000}
+              onConfirm={async () => {
+                if (props.onDeleteAccount) {
+                  const done = await props.onDeleteAccount();
+                  if (done) props.onMessage("Account and all passwords deleted.");
+                } else if (props.onResetApp) {
+                  const done = await props.onResetApp();
+                  if (done) props.onMessage("App reset. First-time setup will start.");
+                }
+              }}
+            />
+          </div>
         </section>
       )}
       </div>
@@ -515,11 +540,12 @@ export function SettingsScreen(props: SettingsScreenProps) {
       )}
 
       {props.vaultTarget && (
-        <GoogleDriveSyncModal
-          open={modal === "gdrive"}
+        <FirebaseSyncModal
+          open={modal === "firebase"}
           vaultTarget={props.vaultTarget}
           onClose={closeModal}
           onMessage={props.onMessage}
+          onSwitchAccount={props.onSwitchAccount ? () => { void props.onSwitchAccount?.(); } : undefined}
         />
       )}
 

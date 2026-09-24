@@ -1,6 +1,7 @@
 import { FormEvent, useCallback, useEffect, useRef, useState } from "react";
 import { LoadingIndicator } from "./LoadingIndicator";
 import { MpinPad } from "./MpinPad";
+import { HoldToConfirmButton } from "./HoldToConfirmButton";
 import { useBackHandler } from "@/shared/backButton";
 
 type UnlockMode = "mpin" | "recovery";
@@ -16,6 +17,7 @@ interface UnlockScreenProps {
   onUnlockBiometric?: () => Promise<boolean>;
   onRestoreBackup: (content: string, password: string) => Promise<boolean>;
   onResetApp?: () => Promise<boolean>;
+  onSwitchAccount?: () => Promise<boolean>;
   /** Desktop: compact card layout instead of full-screen mobile. */
   layout?: "mobile" | "desktop";
 }
@@ -30,6 +32,7 @@ export function UnlockScreen({
   onUnlockMpin,
   onUnlockBiometric,
   onResetApp,
+  onSwitchAccount,
   layout = "mobile",
 }: UnlockScreenProps) {
   const isDesktop = layout === "desktop";
@@ -78,15 +81,6 @@ export function UnlockScreen({
     e.preventDefault();
     const ok = await onUnlockPassword(password);
     if (ok) setPassword("");
-  };
-
-  const handleReset = async () => {
-    if (!onResetApp) return;
-    const ok = confirm(
-      "Erase all vault data, people, passwords, and cached icons? This cannot be undone.",
-    );
-    if (!ok) return;
-    await onResetApp();
   };
 
   return (
@@ -209,14 +203,17 @@ export function UnlockScreen({
                   </button>
                 )}
                 {onResetApp && (
-                  <button
-                    type="button"
-                    className="dev-reset-btn"
-                    disabled={busy}
-                    onClick={() => void handleReset()}
-                  >
-                    Reset app (dev)
-                  </button>
+                  <div style={{ marginTop: "16px", width: "100%" }}>
+                    <HoldToConfirmButton
+                      label="Hold to Reset App Data"
+                      activeLabel="Keep holding to reset…"
+                      durationMs={3000}
+                      disabled={busy}
+                      onConfirm={async () => {
+                        await onResetApp();
+                      }}
+                    />
+                  </div>
                 )}
               </>
             )}
@@ -282,6 +279,17 @@ export function UnlockScreen({
               >
                 Forgot MPIN?
               </button>
+              {onSwitchAccount && (
+                <button
+                  type="button"
+                  className="text-link"
+                  style={{ marginTop: "4px" }}
+                  disabled={busy}
+                  onClick={() => void onSwitchAccount()}
+                >
+                  Switch Account / Vault
+                </button>
+              )}
             </>
           )}
 
@@ -328,15 +336,29 @@ export function UnlockScreen({
                   Back to MPIN
                 </button>
               )}
-              {onResetApp && (
+              {onSwitchAccount && (
                 <button
                   type="button"
-                  className="dev-reset-btn"
+                  className="text-link"
+                  style={{ marginTop: "8px" }}
                   disabled={busy}
-                  onClick={() => void handleReset()}
+                  onClick={() => void onSwitchAccount()}
                 >
-                  Reset app (dev)
+                  Switch Account / Vault
                 </button>
+              )}
+              {onResetApp && (
+                <div style={{ marginTop: "16px", width: "100%" }}>
+                  <HoldToConfirmButton
+                    label="Hold to Reset App Data"
+                    activeLabel="Keep holding to reset…"
+                    durationMs={3000}
+                    disabled={busy}
+                    onConfirm={async () => {
+                      await onResetApp();
+                    }}
+                  />
+                </div>
               )}
             </>
           )}
@@ -354,6 +376,17 @@ export function UnlockScreen({
               >
                 Recovery unlock
               </button>
+              {onSwitchAccount && (
+                <button
+                  type="button"
+                  className="text-link"
+                  style={{ marginTop: "12px" }}
+                  disabled={busy}
+                  onClick={() => void onSwitchAccount()}
+                >
+                  Switch Account / Vault
+                </button>
+              )}
             </>
           )}
         </div>

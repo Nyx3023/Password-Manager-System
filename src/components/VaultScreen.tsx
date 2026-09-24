@@ -15,18 +15,19 @@ import { EntryForm } from "./EntryForm";
 import { Modal } from "./Modal";
 import { EntryList } from "./EntryList";
 import { PersonAvatar } from "./ServiceIcon";
-import { GoogleDriveSyncModal } from "./GoogleDriveSyncModal";
+import { FirebaseSyncModal } from "./FirebaseSyncModal";
 import { formatLastSync } from "@/shared/syncTime";
 import { SettingsScreen } from "./SettingsScreen";
 import { AddEntryWizard } from "./wizard/AddEntryWizard";
 import { TotpAddModal } from "./TotpAddModal";
 import { useBackHandler } from "@/shared/backButton";
 import {
-  loadCloudConfig,
-  subscribeCloudSyncConfig,
-  type GoogleDriveConfig,
+  loadFirebaseSyncState,
+  subscribeFirebaseSyncConfig,
+  initFirebaseAuthListener,
+  type FirebaseSyncConfig,
   type VaultSyncTarget,
-} from "@/shared/cloudSync";
+} from "@/shared/firebaseSync";
 
 type Tab = "vault" | "settings";
 
@@ -77,6 +78,8 @@ interface VaultScreenProps {
   onImportChromeCsv: (csv: string, personId: string) => Promise<number>;
   onMessage: (message: string) => void;
   onResetApp: () => Promise<boolean>;
+  onDeleteAccount?: () => Promise<boolean>;
+  onSwitchAccount?: () => Promise<boolean>;
   trashEntries?: TrashEntry[];
   onRestoreTrash?: (id: string) => Promise<unknown>;
   onPurgeTrash?: (id: string) => Promise<unknown>;
@@ -95,21 +98,22 @@ export function VaultScreen(props: VaultScreenProps) {
   const [showAddChoice, setShowAddChoice] = useState(false);
   const [totpAddOpen, setTotpAddOpen] = useState(false);
   const [editing, setEditing] = useState(false);
-  const [cloudConfig, setCloudConfig] = useState<GoogleDriveConfig | null>(null);
-  const [gdriveModalOpen, setGdriveModalOpen] = useState(false);
+  const [cloudConfig, setCloudConfig] = useState<FirebaseSyncConfig | null>(null);
+  const [firebaseModalOpen, setFirebaseModalOpen] = useState(false);
   const [avatarFailed, setAvatarFailed] = useState(false);
 
   useEffect(() => {
-    void loadCloudConfig().then((cfg) => setCloudConfig(cfg));
-    return subscribeCloudSyncConfig((cfg) => {
+    void initFirebaseAuthListener();
+    void loadFirebaseSyncState().then((cfg) => setCloudConfig(cfg));
+    return subscribeFirebaseSyncConfig((cfg) => {
       setCloudConfig(cfg);
       setAvatarFailed(false);
     });
   }, []);
 
   useBackHandler(() => {
-    if (gdriveModalOpen) {
-      setGdriveModalOpen(false);
+    if (firebaseModalOpen) {
+      setFirebaseModalOpen(false);
       return true;
     }
     if (totpAddOpen) {
@@ -191,21 +195,21 @@ export function VaultScreen(props: VaultScreenProps) {
                 }`}
                 title={
                   cloudConfig?.enabled
-                    ? `Google Drive (${cloudConfig.userEmail || "Connected"})${
+                    ? `Google Cloud (${cloudConfig.userEmail || "Connected"})${
                         cloudConfig.lastSyncStatus === "syncing"
                           ? " - Syncing..."
                           : cloudConfig.lastSyncAt
                             ? " - Synced " + formatLastSync(cloudConfig.lastSyncAt)
-                            : ""
+                            : " - Live Connected"
                       }`
-                    : "Connect Google Drive"
+                    : "Connect Google Cloud (Firebase)"
                 }
                 aria-label={
                   cloudConfig?.enabled
-                    ? `Google Drive (${cloudConfig.userEmail || "Connected"})`
-                    : "Connect Google Drive"
+                    ? `Google Cloud (${cloudConfig.userEmail || "Connected"})`
+                    : "Connect Google Cloud (Firebase)"
                 }
-                onClick={() => setGdriveModalOpen(true)}
+                onClick={() => setFirebaseModalOpen(true)}
               >
                 <div className="topbar-google-avatar-wrap">
                   {cloudConfig?.enabled && cloudConfig.userPicture && !avatarFailed ? (
@@ -253,7 +257,7 @@ export function VaultScreen(props: VaultScreenProps) {
         <p className="muted small topbar-meta">
           {props.entries.length} entries | {props.people.length} people
           {cloudConfig?.enabled && (
-            <> | Drive {cloudConfig.lastSyncAt ? formatLastSync(cloudConfig.lastSyncAt) : "Ready"}</>
+            <> | Cloud {cloudConfig.lastSyncAt ? formatLastSync(cloudConfig.lastSyncAt) : "Live"}</>
           )}
         </p>
       </header>
@@ -282,11 +286,13 @@ export function VaultScreen(props: VaultScreenProps) {
             onImportChromeCsv={props.onImportChromeCsv}
             onMessage={props.onMessage}
             onResetApp={props.onResetApp}
+            onDeleteAccount={props.onDeleteAccount}
             trashEntries={props.trashEntries}
             onRestoreTrash={props.onRestoreTrash}
             onPurgeTrash={props.onPurgeTrash}
             onEmptyTrash={props.onEmptyTrash}
             onImportTotp={props.onImportTotp}
+            onSwitchAccount={props.onSwitchAccount}
             vaultTarget={props.vaultTarget}
           />
         ) : props.entries.length === 0 ? (
@@ -471,11 +477,12 @@ export function VaultScreen(props: VaultScreenProps) {
       </Modal>
 
       {props.vaultTarget && (
-        <GoogleDriveSyncModal
-          open={gdriveModalOpen}
+        <FirebaseSyncModal
+          open={firebaseModalOpen}
           vaultTarget={props.vaultTarget}
-          onClose={() => setGdriveModalOpen(false)}
+          onClose={() => setFirebaseModalOpen(false)}
           onMessage={props.onMessage}
+          onSwitchAccount={props.onSwitchAccount ? () => { void props.onSwitchAccount?.(); } : undefined}
         />
       )}
 

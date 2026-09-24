@@ -23,6 +23,8 @@ const SAFE_FILES = new Set([
   "ipc-session.token",
   "mpin-device.json",
   "unlock-attempts.json",
+  "firebase_sync_state.json",
+  "firebase_project_config.json",
 ]);
 
 /**
@@ -40,7 +42,8 @@ function sanitizeFileName(name) {
   if (name.startsWith(".")) {
     throw new Error("Invalid file name: hidden files not allowed.");
   }
-  if (!SAFE_FILES.has(name)) {
+  const isAccountFile = /^(vault|mpin)_[a-zA-Z0-9_.-]+\.(enc\.json|json)$/.test(name);
+  if (!SAFE_FILES.has(name) && !isAccountFile && name !== "cached_accounts.json") {
     throw new Error(`Invalid file name: "${name}" is not allowed.`);
   }
   return name;
@@ -59,36 +62,6 @@ function ensureDataDir(app) {
   if (!fs.existsSync(dir)) {
     fs.mkdirSync(dir, { recursive: true });
   }
-
-  // Legacy data migration: If current dir has no vault, check older Password Manager folders.
-  const currentVault = path.join(dir, VAULT_FILE);
-  if (!fs.existsSync(currentVault)) {
-    try {
-      const appData = app.getPath("appData");
-      const legacyDirs = [
-        path.join(appData, "Password Manager"),
-        path.join(appData, "password-manager-system"),
-      ];
-      for (const leg of legacyDirs) {
-        const legVault = path.join(leg, VAULT_FILE);
-        if (fs.existsSync(legVault)) {
-          // Copy vault and relevant config files
-          for (const item of fs.readdirSync(leg)) {
-            const src = path.join(leg, item);
-            const dst = path.join(dir, item);
-            if (!fs.existsSync(dst) && fs.statSync(src).isFile()) {
-              fs.copyFileSync(src, dst);
-            }
-          }
-          console.log(`[SecureX] Migrated existing vault data from: ${leg}`);
-          break;
-        }
-      }
-    } catch (e) {
-      console.warn("[SecureX] Data migration check encountered an error:", e);
-    }
-  }
-
   return dir;
 }
 

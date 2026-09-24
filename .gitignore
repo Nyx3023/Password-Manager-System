@@ -1,6 +1,8 @@
 node_modules/
 dist/
-android/
+/android/
+build/
+.gradle/
 .capacitor/
 *.log
 .DS_Store

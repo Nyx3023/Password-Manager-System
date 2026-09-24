@@ -17,12 +17,17 @@ function useElectronStorage(): boolean {
   return isDesktopApp() && !!window.electronAPI?.readDataFile;
 }
 
+const memoryMpin = new Map<string, string>();
+
 async function readMpinFile(): Promise<string | null> {
   if (useElectronStorage()) {
     return window.electronAPI!.readDataFile(MPIN_FILE);
   }
   if (!Capacitor.isNativePlatform()) {
-    return sessionStorage.getItem(MPIN_FILE);
+    if (typeof sessionStorage !== "undefined") {
+      return sessionStorage.getItem(MPIN_FILE);
+    }
+    return memoryMpin.get(MPIN_FILE) ?? null;
   }
   try {
     const result = await Filesystem.readFile({
@@ -42,7 +47,11 @@ async function writeMpinFile(content: string): Promise<void> {
     return;
   }
   if (!Capacitor.isNativePlatform()) {
-    sessionStorage.setItem(MPIN_FILE, content);
+    if (typeof sessionStorage !== "undefined") {
+      sessionStorage.setItem(MPIN_FILE, content);
+    } else {
+      memoryMpin.set(MPIN_FILE, content);
+    }
     return;
   }
   await Filesystem.writeFile({
@@ -59,7 +68,11 @@ async function deleteMpinFile(): Promise<void> {
     return;
   }
   if (!Capacitor.isNativePlatform()) {
-    sessionStorage.removeItem(MPIN_FILE);
+    if (typeof sessionStorage !== "undefined") {
+      sessionStorage.removeItem(MPIN_FILE);
+    } else {
+      memoryMpin.delete(MPIN_FILE);
+    }
     return;
   }
   try {

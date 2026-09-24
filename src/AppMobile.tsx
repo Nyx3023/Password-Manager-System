@@ -10,9 +10,15 @@ import { useVault } from "@/hooks/useVault";
 import { autofillSupported, VaultAutofill } from "@/shared/vaultAutofill";
 import {
   type VaultSyncTarget,
-  syncVaultWithGoogleDrive,
-  loadCloudConfig,
-} from "@/shared/cloudSync";
+  syncVaultWithFirebase,
+  loadFirebaseSyncState,
+  subscribeRemoteVault,
+  initFirebaseAuthListener,
+  signInWithGoogle,
+  fetchRemoteVaultFromFirebase,
+} from "@/shared/firebaseSync";
+import { isFirebaseConfigured, loadFirebaseConfig } from "@/shared/firebaseConfig";
+import { restoreArchivedVault } from "@/shared/accountVaults";
 
 const AUTO_LOCK_MS = 5 * 60 * 1000;
 
@@ -43,6 +49,7 @@ export default function AppMobile() {
   }, []);
 
   useEffect(() => {
+    void initFirebaseAuthListener();
     void vault.init();
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, []);
@@ -91,43 +98,77 @@ export default function AppMobile() {
     [vault.unlocked, vault.exportVault, vault.mergeUnlockedFromRaw],
   );
 
-  // Sync on unlock
+  const showToast = useCallback((message: string) => {
+    setToast(message);
+    window.setTimeout(() => setToast(null), 3000);
+  }, []);
+
+  // Firestore Real-Time Push Listener & Sync on Unlock
   useEffect(() => {
     if (!vault.unlocked) return;
-    void loadCloudConfig().then((cfg) => {
+
+    const triggerSync = async () => {
+      const cfg = await loadFirebaseSyncState();
       if (cfg.enabled && cfg.autoSync) {
-        void syncVaultWithGoogleDrive(vaultTarget);
+        const res = await syncVaultWithFirebase(vaultTarget);
+        if (res?.error === "REMOTE_DELETED") {
+          await vault.deleteAccountAndVault();
+          showToast("This vault was deleted on another device.");
+        }
       }
-    });
-  }, [vault.unlocked, vaultTarget]);
+    };
+
+    void triggerSync();
+
+    const unsubscribe = subscribeRemoteVault(
+      vaultTarget,
+      () => {
+        void vault.refreshMeta();
+      },
+      () => {
+        void vault.deleteAccountAndVault().then(() => {
+          showToast("This vault was deleted on another device.");
+        });
+      },
+    );
+    return unsubscribe;
+  }, [vault.unlocked, vaultTarget, showToast]);
 
   // Debounced auto-sync when entries, trash, or people change
   useEffect(() => {
     if (!vault.unlocked) return;
     const timer = window.setTimeout(() => {
-      void loadCloudConfig().then((cfg) => {
+      void (async () => {
+        const cfg = await loadFirebaseSyncState();
         if (cfg.enabled && cfg.autoSync) {
-          void syncVaultWithGoogleDrive(vaultTarget);
+          const res = await syncVaultWithFirebase(vaultTarget);
+          if (res?.error === "REMOTE_DELETED") {
+            await vault.deleteAccountAndVault();
+            showToast("This vault was deleted on another device.");
+          }
         }
-      });
-    }, 2500);
+      })();
+    }, 2000);
     return () => window.clearTimeout(timer);
-  }, [vault.entries, vault.trashEntries, vault.people, vault.unlocked, vaultTarget]);
+  }, [vault.entries, vault.trashEntries, vault.people, vault.unlocked, vaultTarget, showToast]);
 
   // Auto-sync on window focus, visibility change, and periodic 60s
   useEffect(() => {
     if (!vault.unlocked) return;
-    const triggerSync = () => {
-      void loadCloudConfig().then((cfg) => {
-        if (cfg.enabled && cfg.autoSync) {
-          void syncVaultWithGoogleDrive(vaultTarget);
+    const triggerSync = async () => {
+      const cfg = await loadFirebaseSyncState();
+      if (cfg.enabled && cfg.autoSync) {
+        const res = await syncVaultWithFirebase(vaultTarget);
+        if (res?.error === "REMOTE_DELETED") {
+          await vault.deleteAccountAndVault();
+          showToast("This vault was deleted on another device.");
         }
-      });
+      }
     };
 
     const handleVisibility = () => {
       if (document.visibilityState === "visible") {
-        triggerSync();
+        void triggerSync();
       }
     };
 
@@ -140,12 +181,7 @@ export default function AppMobile() {
       document.removeEventListener("visibilitychange", handleVisibility);
       window.clearInterval(interval);
     };
-  }, [vault.unlocked, vaultTarget]);
-
-  const showToast = useCallback((message: string) => {
-    setToast(message);
-    window.setTimeout(() => setToast(null), 3000);
-  }, []);
+  }, [vault.unlocked, vaultTarget, showToast]);
 
   const handleCopy = useCallback(
     async (label: string, value: string) => {
@@ -171,7 +207,9 @@ export default function AppMobile() {
         <SetupWizard
           busy={vault.busy}
           error={vault.error}
-          onComplete={vault.completeSetup}
+          onComplete={async (data) => {
+            return await vault.completeSetup(data);
+          }}
           onRestoreBackup={(content, password) =>
             vault.importVault(content, password, "replace")
           }
@@ -188,6 +226,28 @@ export default function AppMobile() {
               return true;
             }
             return false;
+          }}
+          onSwitchCachedAccount={async (uid) => {
+            const restored = await restoreArchivedVault(uid);
+            if (restored) {
+              await vault.refreshMeta();
+              return true;
+            }
+            return false;
+          }}
+          onGoogleSignIn={async () => {
+            const config = await loadFirebaseConfig();
+            if (!isFirebaseConfigured(config)) {
+              throw new Error("Firebase is not configured. Please check your environment settings.");
+            }
+            const { user } = await signInWithGoogle();
+            const restored = await restoreArchivedVault(user.uid);
+            if (restored) {
+              await vault.refreshMeta();
+              return { uid: user.uid, email: user.email || "Google Account", vaultContent: null };
+            }
+            const vaultContent = await fetchRemoteVaultFromFirebase();
+            return { uid: user.uid, email: user.email || "Google Account", vaultContent };
           }}
         />
       );
@@ -207,6 +267,7 @@ export default function AppMobile() {
           vault.importVault(content, password, "replace")
         }
         onResetApp={vault.resetApp}
+        onSwitchAccount={vault.switchAccount}
       />
     );
   }
@@ -239,6 +300,8 @@ export default function AppMobile() {
       onImportChromeCsv={vault.importChromeCsv}
       onMessage={showToast}
       onResetApp={vault.resetApp}
+      onDeleteAccount={vault.deleteAccountAndVault}
+      onSwitchAccount={vault.switchAccount}
       trashEntries={vault.trashEntries}
       onRestoreTrash={vault.restoreTrashEntry}
       onPurgeTrash={vault.purgeTrashEntry}

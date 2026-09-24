@@ -74,6 +74,12 @@ function parseEncryptedFile(raw: string): EncryptedVaultFile {
     if (typeof obj.vaultId === "string") {
       file.vaultId = obj.vaultId;
     }
+    if (typeof obj.ownerUid === "string") {
+      file.ownerUid = obj.ownerUid;
+    }
+    if (typeof obj.ownerEmail === "string") {
+      file.ownerEmail = obj.ownerEmail;
+    }
     return file;
   }
 
@@ -133,6 +139,12 @@ async function decryptPayloadFromFile(
 
   try {
     const payload = JSON.parse(json) as VaultPayload;
+    if (file.ownerUid && !payload.ownerUid) {
+      payload.ownerUid = file.ownerUid;
+    }
+    if (file.ownerEmail && !payload.ownerEmail) {
+      payload.ownerEmail = file.ownerEmail;
+    }
     return normalizePayload(payload);
   } catch {
     throw new VaultDecryptError("json", { biometric: options?.biometric });
@@ -151,6 +163,25 @@ export class VaultService {
 
   get vaultId(): string | undefined {
     return this.payload?.vaultId || this.file?.vaultId;
+  }
+
+  get ownerUid(): string | undefined {
+    return this.payload?.ownerUid || this.file?.ownerUid;
+  }
+
+  get ownerEmail(): string | undefined {
+    return this.payload?.ownerEmail || this.file?.ownerEmail;
+  }
+
+  setOwner(ownerUid: string, ownerEmail?: string): void {
+    if (this.payload) {
+      this.payload.ownerUid = ownerUid;
+      this.payload.ownerEmail = ownerEmail;
+    }
+    if (this.file) {
+      this.file.ownerUid = ownerUid;
+      this.file.ownerEmail = ownerEmail;
+    }
   }
 
   get entries(): VaultEntry[] {
@@ -178,10 +209,18 @@ export class VaultService {
     return hasMpinOnDevice();
   }
 
-  async createVault(masterPassword: string): Promise<void> {
+  async createVault(
+    masterPassword: string,
+    owner?: { uid: string; email?: string },
+  ): Promise<void> {
     const vId = crypto.randomUUID();
     this.vaultKey = generateVaultKey();
-    this.payload = { ...emptyPayload(), vaultId: vId };
+    this.payload = {
+      ...emptyPayload(),
+      vaultId: vId,
+      ownerUid: owner?.uid,
+      ownerEmail: owner?.email,
+    };
     const master = await buildMasterWrap(masterPassword, this.vaultKey);
     const encrypted = await encryptPayload(
       this.vaultKey,
@@ -190,6 +229,8 @@ export class VaultService {
     this.file = {
       version: 2,
       vaultId: vId,
+      ownerUid: owner?.uid,
+      ownerEmail: owner?.email,
       kdf: "argon2id",
       cipher: "aes-256-gcm",
       master,
@@ -583,6 +624,8 @@ export class VaultService {
     this.file = {
       ...this.file,
       vaultId: this.payload.vaultId,
+      ownerUid: this.payload.ownerUid || this.file.ownerUid,
+      ownerEmail: this.payload.ownerEmail || this.file.ownerEmail,
       iv: encrypted.iv,
       ciphertext: encrypted.ciphertext,
     };
@@ -615,6 +658,10 @@ export class VaultService {
     const incoming = parseEncryptedFile(fileContent);
     const incomingPayload = await decryptPayloadFromFile(this.vaultKey!, incoming);
     this.payload = mergeVaultPayloads(this.payload!, incomingPayload);
+    if (!this.payload.ownerUid && incoming.ownerUid) {
+      this.payload.ownerUid = incoming.ownerUid;
+      this.payload.ownerEmail = incoming.ownerEmail;
+    }
     await this.save();
   }
 
@@ -654,13 +701,23 @@ export class VaultService {
     if (mode === "replace" || !this.payload) {
       this.vaultKey = vaultKey;
       this.payload = incomingPayload;
+      if (incoming.ownerUid && !this.payload.ownerUid) {
+        this.payload.ownerUid = incoming.ownerUid;
+        this.payload.ownerEmail = incoming.ownerEmail;
+      }
       this.file = incoming;
       await saveVaultFile(fileContent);
+      await deleteMpinWrap();
+      await this.disableBiometrics();
       return;
     }
 
     this.requireUnlocked();
     this.payload = mergeVaultPayloads(this.payload, incomingPayload);
+    if (!this.payload.ownerUid && incoming.ownerUid) {
+      this.payload.ownerUid = incoming.ownerUid;
+      this.payload.ownerEmail = incoming.ownerEmail;
+    }
     await this.save();
   }
 

@@ -10,7 +10,15 @@ import { isVaultDecryptError } from "@/shared/vaultErrors";
 import { clearAutofillSession, syncAutofillSession } from "@/shared/autofillSync";
 import { chromeRowToEntry, parseChromeCsv } from "@/shared/chromeCsv";
 import { validateMasterPassword } from "@/shared/passwordPolicy";
-import { loadPrefs, resetAllAppData, savePrefs } from "@/shared/storage";
+import { clearActiveVaultSlot, getVaultOwnerInfo, loadPrefs, resetAllAppData, savePrefs } from "@/shared/storage";
+import { archiveCurrentVault, removeArchivedVault } from "@/shared/accountVaults";
+import {
+  deleteRemoteVaultFromFirebase,
+  saveFirebaseSyncState,
+  signOutFirebase,
+  stopRemoteVaultSubscription,
+  uploadVaultToFirebase,
+} from "@/shared/firebaseSync";
 import { VaultService } from "@/shared/vaultService";
 import type {
   ImportMode,
@@ -79,11 +87,32 @@ export function useVault() {
       setError(null);
       setBusy(true);
       try {
-        await service.createVault(data.password);
+        await service.createVault(
+          data.password,
+          data.ownerUid ? { uid: data.ownerUid, email: data.ownerEmail } : undefined,
+        );
         for (const person of data.people) {
           service.addPerson(person.name, person.category);
         }
         await service.save();
+
+        if (data.cloudMode && data.ownerUid) {
+          await saveFirebaseSyncState({
+            enabled: true,
+            userId: data.ownerUid,
+            userEmail: data.ownerEmail,
+            ownerUid: data.ownerUid,
+            ownerEmail: data.ownerEmail,
+            lastSyncStatus: "idle",
+            lastError: null,
+          });
+          try {
+            const raw = await service.exportVault();
+            await uploadVaultToFirebase(raw);
+          } catch (e) {
+            console.warn("[useVault] Immediate cloud upload notice:", e);
+          }
+        }
 
         if (data.enableBiometrics) {
           try {
@@ -207,6 +236,10 @@ export function useVault() {
     setError(null);
     setBusy(true);
     try {
+      stopRemoteVaultSubscription();
+      try {
+        await signOutFirebase();
+      } catch {}
       service.lock();
       await clearAutofillSession();
       await disableBiometricUnlock();
@@ -214,6 +247,7 @@ export function useVault() {
       setHasVault(false);
       setUnlocked(false);
       setEntries([]);
+      setTrashEntries([]);
       setPeople([]);
       setBiometricsEnabled(false);
       setMpinEnabled(false);
@@ -221,6 +255,98 @@ export function useVault() {
       return true;
     } catch (e) {
       setError(e instanceof Error ? e.message : "Reset failed.");
+      return false;
+    } finally {
+      setBusy(false);
+    }
+  }, [service, refreshMeta]);
+
+  const switchAccount = useCallback(async () => {
+    setError(null);
+    setBusy(true);
+    try {
+      const ownerInfo = await getVaultOwnerInfo();
+      const currentUid = ownerInfo?.ownerUid || service.ownerUid;
+      const currentEmail = ownerInfo?.ownerEmail || service.ownerEmail;
+
+      // 1. Archive current vault if present
+      await archiveCurrentVault(currentUid, currentEmail);
+
+      // 2. Stop cloud listener
+      stopRemoteVaultSubscription();
+
+      // 3. Clear memory and autofill
+      service.lock();
+      await clearAutofillSession();
+      await disableBiometricUnlock();
+
+      // 4. Wipe active slot files so SetupWizard / account picker is shown (keeps auth tokens intact)
+      await clearActiveVaultSlot();
+
+      // 5. Reset hook states
+      setHasVault(false);
+      setUnlocked(false);
+      setEntries([]);
+      setTrashEntries([]);
+      setPeople([]);
+      setBiometricsEnabled(false);
+      setMpinEnabled(false);
+      await refreshMeta();
+      return true;
+    } catch (e) {
+      setError(e instanceof Error ? e.message : "Failed to switch account.");
+      return false;
+    } finally {
+      setBusy(false);
+    }
+  }, [service, refreshMeta]);
+
+  const deleteAccountAndVault = useCallback(async () => {
+    setError(null);
+    setBusy(true);
+    try {
+      const ownerInfo = await getVaultOwnerInfo();
+      const currentUid = ownerInfo?.ownerUid || service.ownerUid;
+
+      // 1. Delete remote cloud vault from Firestore
+      try {
+        await deleteRemoteVaultFromFirebase();
+      } catch (e) {
+        console.warn("[useVault] Cloud vault deletion notice:", e);
+      }
+      // 2. Disconnect and sign out of Firebase
+      try {
+        await signOutFirebase();
+      } catch {}
+
+      // 3. Stop active listeners
+      stopRemoteVaultSubscription();
+
+      // 4. Lock in-memory vault and clear credentials
+      service.lock();
+      await clearAutofillSession();
+      await disableBiometricUnlock();
+
+      // 5. Remove any local archives for this account
+      if (currentUid) {
+        await removeArchivedVault(currentUid);
+      }
+
+      // 6. Factory reset all local storage files (vault, backups, mpin, prefs, etc.)
+      await resetAllAppData();
+
+      // 7. Reset hook states
+      setHasVault(false);
+      setUnlocked(false);
+      setEntries([]);
+      setTrashEntries([]);
+      setPeople([]);
+      setBiometricsEnabled(false);
+      setMpinEnabled(false);
+      await refreshMeta();
+      return true;
+    } catch (e) {
+      setError(e instanceof Error ? e.message : "Failed to delete account.");
       return false;
     } finally {
       setBusy(false);
@@ -421,6 +547,13 @@ export function useVault() {
       try {
         await service.importVault(content, password, mode);
         setHasVault(true);
+        if (mode === "replace") {
+          setBiometricsEnabled(false);
+          setMpinEnabled(false);
+          const prefs = await loadPrefs();
+          prefs.setupComplete = true;
+          await savePrefs(prefs);
+        }
         sync();
         return true;
       } catch (e) {
@@ -585,6 +718,9 @@ export function useVault() {
     ready,
     hasVault,
     vaultId: service.vaultId,
+    ownerUid: service.ownerUid,
+    ownerEmail: service.ownerEmail,
+    setOwner: service.setOwner,
     unlocked,
     entries,
     trashEntries,
@@ -623,6 +759,8 @@ export function useVault() {
     setError,
     refreshMeta,
     resetApp,
+    switchAccount,
+    deleteAccountAndVault,
     verifyBackupPassword,
   };
 }

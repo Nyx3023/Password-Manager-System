@@ -16,6 +16,15 @@ export interface ElectronAPI {
   onToggleQuickAccess: (handler: () => void) => () => void;
   sendAutofillResponse: (id: number, result: any) => void;
   googleStartAuth: (authUrlTemplate: string) => Promise<{ ok: boolean; code: string; redirectUri: string }>;
+  googleSystemBrowserAuth?: (firebaseConfig: any) => Promise<{
+    ok: boolean;
+    googleIdToken?: string | null;
+    googleAccessToken?: string | null;
+    email?: string;
+    displayName?: string;
+    photoURL?: string;
+    uid?: string;
+  }>;
   netFetch?: (
     url: string,
     options?: {

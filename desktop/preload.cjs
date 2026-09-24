@@ -41,6 +41,8 @@ contextBridge.exposeInMainWorld("electronAPI", {
   },
   googleStartAuth: (authUrlTemplate) =>
     ipcRenderer.invoke("google:start-auth", { authUrlTemplate }),
+  googleSystemBrowserAuth: (firebaseConfig) =>
+    ipcRenderer.invoke("google:system-browser-auth", { firebaseConfig }),
   netFetch: (url, options) =>
     ipcRenderer.invoke("net:fetch", { url, ...options }),
 });

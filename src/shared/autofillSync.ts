@@ -67,5 +67,9 @@ export async function syncAutofillSession(
 
 export async function clearAutofillSession(): Promise<void> {
   if (!autofillSupported()) return;
-  await VaultAutofill.clearSession();
+  try {
+    await VaultAutofill.clearSession();
+  } catch (e) {
+    console.warn("[Autofill] clearSession suppressed:", e);
+  }
 }

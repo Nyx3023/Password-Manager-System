@@ -3,18 +3,24 @@ import { formatLastSync } from "@/shared/syncTime";
 import { SetupWizard } from "@/components/setup/SetupWizard";
 import { UnlockScreen } from "@/components/UnlockScreen";
 import { SettingsScreen } from "@/components/SettingsScreen";
-import { GoogleDriveSyncModal } from "@/components/GoogleDriveSyncModal";
+import { FirebaseSyncModal } from "@/components/FirebaseSyncModal";
 import { useAutoLock } from "@/hooks/useAutoLock";
 import { useClipboard } from "@/hooks/useClipboard";
 import { useVault } from "@/hooks/useVault";
 import { entriesToAutofillCredentials, hostFromUrl } from "@/shared/autofillSync";
 import {
   type VaultSyncTarget,
-  syncVaultWithGoogleDrive,
-  loadCloudConfig,
-  subscribeCloudSyncConfig,
-  type GoogleDriveConfig,
-} from "@/shared/cloudSync";
+  syncVaultWithFirebase,
+  loadFirebaseSyncState,
+  subscribeFirebaseSyncConfig,
+  subscribeRemoteVault,
+  initFirebaseAuthListener,
+  signInWithGoogle,
+  fetchRemoteVaultFromFirebase,
+  type FirebaseSyncState,
+} from "@/shared/firebaseSync";
+import { isFirebaseConfigured, loadFirebaseConfig } from "@/shared/firebaseConfig";
+import { restoreArchivedVault } from "@/shared/accountVaults";
 import { DesktopVaultView } from "./DesktopVaultView";
 import { DesktopQuickAccess } from "./DesktopQuickAccess";
 import "./desktop.css";
@@ -30,13 +36,14 @@ export default function AppDesktop() {
   const [nav, setNav] = useState<Nav>("vault");
   const [adding, setAdding] = useState(false);
   const [quickAccess, setQuickAccess] = useState(false);
-  const [cloudConfig, setCloudConfig] = useState<GoogleDriveConfig | null>(null);
-  const [gdriveModalOpen, setGdriveModalOpen] = useState(false);
+  const [cloudConfig, setCloudConfig] = useState<FirebaseSyncState | null>(null);
+  const [firebaseModalOpen, setFirebaseModalOpen] = useState(false);
   const [avatarFailed, setAvatarFailed] = useState(false);
 
   useEffect(() => {
-    void loadCloudConfig().then((cfg) => setCloudConfig(cfg));
-    return subscribeCloudSyncConfig((cfg) => {
+    void initFirebaseAuthListener();
+    void loadFirebaseSyncState().then((cfg) => setCloudConfig(cfg));
+    return subscribeFirebaseSyncConfig((cfg) => {
       setCloudConfig(cfg);
       setAvatarFailed(false);
     });
@@ -51,61 +58,88 @@ export default function AppDesktop() {
     [vault.unlocked, vault.exportVault, vault.mergeUnlockedFromRaw],
   );
 
-  // Sync on unlock
+  const showToast = useCallback((message: string) => {
+    setToast(message);
+    window.setTimeout(() => setToast(null), 3000);
+  }, []);
+
+  // Firestore Real-Time Push Listener & Sync on Unlock
   useEffect(() => {
     if (!vault.unlocked) return;
-    void loadCloudConfig().then((cfg) => {
+
+    const triggerSync = async () => {
+      const cfg = await loadFirebaseSyncState();
       if (cfg.enabled && cfg.autoSync) {
-        void syncVaultWithGoogleDrive(vaultTarget);
+        const res = await syncVaultWithFirebase(vaultTarget);
+        if (res?.error === "REMOTE_DELETED") {
+          await vault.deleteAccountAndVault();
+          showToast("This vault was deleted on another device.");
+        }
       }
-    });
-  }, [vault.unlocked, vaultTarget]);
+    };
+
+    void triggerSync();
+
+    const unsubscribe = subscribeRemoteVault(
+      vaultTarget,
+      () => {
+        void vault.refreshMeta();
+      },
+      () => {
+        void vault.deleteAccountAndVault().then(() => {
+          showToast("This vault was deleted on another device.");
+        });
+      },
+    );
+    return unsubscribe;
+  }, [vault.unlocked, vaultTarget, showToast]);
 
   // Debounced auto-sync when entries, trash, or people change
   useEffect(() => {
     if (!vault.unlocked) return;
     const timer = window.setTimeout(() => {
-      void loadCloudConfig().then((cfg) => {
+      void (async () => {
+        const cfg = await loadFirebaseSyncState();
         if (cfg.enabled && cfg.autoSync) {
-          void syncVaultWithGoogleDrive(vaultTarget);
+          const res = await syncVaultWithFirebase(vaultTarget);
+          if (res?.error === "REMOTE_DELETED") {
+            await vault.deleteAccountAndVault();
+            showToast("This vault was deleted on another device.");
+          }
         }
-      });
+      })();
     }, 2500);
     return () => window.clearTimeout(timer);
-  }, [vault.entries, vault.trashEntries, vault.people, vault.unlocked, vaultTarget]);
+  }, [vault.entries, vault.trashEntries, vault.people, vault.unlocked, vaultTarget, showToast]);
 
-  // Auto-sync on window focus, visibility change, and periodic 60s
+  // Auto-sync on window focus & visibility change
   useEffect(() => {
     if (!vault.unlocked) return;
-    const triggerSync = () => {
-      void loadCloudConfig().then((cfg) => {
-        if (cfg.enabled && cfg.autoSync) {
-          void syncVaultWithGoogleDrive(vaultTarget);
+    const triggerSync = async () => {
+      const cfg = await loadFirebaseSyncState();
+      if (cfg.enabled && cfg.autoSync) {
+        const res = await syncVaultWithFirebase(vaultTarget);
+        if (res?.error === "REMOTE_DELETED") {
+          await vault.deleteAccountAndVault();
+          showToast("This vault was deleted on another device.");
         }
-      });
+      }
     };
 
     const handleVisibility = () => {
       if (document.visibilityState === "visible") {
-        triggerSync();
+        void triggerSync();
       }
     };
 
     window.addEventListener("focus", triggerSync);
     document.addEventListener("visibilitychange", handleVisibility);
-    const interval = window.setInterval(triggerSync, 60_000);
 
     return () => {
       window.removeEventListener("focus", triggerSync);
       document.removeEventListener("visibilitychange", handleVisibility);
-      window.clearInterval(interval);
     };
-  }, [vault.unlocked, vaultTarget]);
-
-  const showToast = useCallback((message: string) => {
-    setToast(message);
-    window.setTimeout(() => setToast(null), 3000);
-  }, []);
+  }, [vault.unlocked, vaultTarget, showToast]);
 
   useEffect(() => {
     void vault.init();
@@ -234,7 +268,9 @@ export default function AppDesktop() {
               layout="desktop"
               busy={vault.busy}
               error={vault.error}
-              onComplete={vault.completeSetup}
+              onComplete={async (data) => {
+                return await vault.completeSetup(data);
+              }}
               onRestoreBackup={(content, password) =>
                 vault.importVault(content, password, "replace")
               }
@@ -248,6 +284,28 @@ export default function AppDesktop() {
                   return true;
                 }
                 return false;
+              }}
+              onSwitchCachedAccount={async (uid) => {
+                const restored = await restoreArchivedVault(uid);
+                if (restored) {
+                  await vault.refreshMeta();
+                  return true;
+                }
+                return false;
+              }}
+              onGoogleSignIn={async () => {
+                const config = await loadFirebaseConfig();
+                if (!isFirebaseConfigured(config)) {
+                  throw new Error("Firebase is not configured. Please check your environment settings.");
+                }
+                const { user } = await signInWithGoogle();
+                const restored = await restoreArchivedVault(user.uid);
+                if (restored) {
+                  await vault.refreshMeta();
+                  return { uid: user.uid, email: user.email || "Google Account", vaultContent: null };
+                }
+                const vaultContent = await fetchRemoteVaultFromFirebase();
+                return { uid: user.uid, email: user.email || "Google Account", vaultContent };
               }}
             />
           ) : (
@@ -264,6 +322,7 @@ export default function AppDesktop() {
                 vault.importVault(content, password, "replace")
               }
               onResetApp={vault.resetApp}
+              onSwitchAccount={vault.switchAccount}
             />
           )}
         </div>
@@ -299,9 +358,9 @@ export default function AppDesktop() {
         <button
           type="button"
           className="desktop-sidebar-footer"
-          onClick={() => setGdriveModalOpen(true)}
+          onClick={() => setFirebaseModalOpen(true)}
         >
-          <p className="label-mono">GOOGLE DRIVE</p>
+          <p className="label-mono">GOOGLE CLOUD SYNC</p>
           <p
             className="muted small"
             style={{
@@ -310,13 +369,13 @@ export default function AppDesktop() {
             }}
           >
             {cloudConfig?.enabled
-              ? `☁️ Drive: ${cloudConfig.userEmail?.split("@")[0] || "Connected"}`
-              : "☁️ Drive: Offline"}
+              ? `⚡ Cloud: ${cloudConfig.userEmail?.split("@")[0] || "Connected"}`
+              : "⚡ Cloud: Offline"}
           </p>
           <p className="muted small desktop-sidebar-lan-hint">
             {cloudConfig?.enabled
-              ? `Last sync ${formatLastSync(cloudConfig.lastSyncAt ?? null)}`
-              : "Click to connect"}
+              ? `Push live • ${formatLastSync(cloudConfig.lastSyncAt ?? null)}`
+              : "Click to sign in with Google"}
           </p>
         </button>
       </aside>
@@ -327,7 +386,7 @@ export default function AppDesktop() {
             <h1>{nav === "vault" ? "Vault" : "Settings"}</h1>
             {cloudConfig?.enabled && (
               <p className="muted small desktop-topbar-sync-meta">
-                Drive connected | Last sync {formatLastSync(cloudConfig.lastSyncAt ?? null)}
+                Cloud push live | Last sync {formatLastSync(cloudConfig.lastSyncAt ?? null)}
               </p>
             )}
           </div>
@@ -356,17 +415,17 @@ export default function AppDesktop() {
               }`}
               title={
                 cloudConfig?.enabled
-                  ? `Google Drive (${cloudConfig.userEmail || "Connected"})${
+                  ? `Google Cloud Sync (${cloudConfig.userEmail || "Connected"})${
                       cloudConfig.lastSyncStatus === "syncing"
                         ? " - Syncing..."
                         : cloudConfig.lastSyncAt
                           ? " - Synced " + formatLastSync(cloudConfig.lastSyncAt)
                           : ""
                     }`
-                  : "Connect Google Drive"
+                  : "Connect Google Account"
               }
-              aria-label="Google Drive sync"
-              onClick={() => setGdriveModalOpen(true)}
+              aria-label="Google Cloud sync"
+              onClick={() => setFirebaseModalOpen(true)}
             >
               <div className="topbar-google-avatar-wrap">
                 {cloudConfig?.enabled && cloudConfig.userPicture && !avatarFailed ? (
@@ -444,6 +503,8 @@ export default function AppDesktop() {
               onImportChromeCsv={vault.importChromeCsv}
               onMessage={showToast}
               onResetApp={vault.resetApp}
+              onDeleteAccount={vault.deleteAccountAndVault}
+              onSwitchAccount={vault.switchAccount}
               trashEntries={vault.trashEntries}
               onRestoreTrash={vault.restoreTrashEntry}
               onPurgeTrash={vault.purgeTrashEntry}
@@ -480,11 +541,12 @@ export default function AppDesktop() {
         />
       )}
 
-      <GoogleDriveSyncModal
-        open={gdriveModalOpen}
+      <FirebaseSyncModal
+        open={firebaseModalOpen}
         vaultTarget={vaultTarget}
-        onClose={() => setGdriveModalOpen(false)}
+        onClose={() => setFirebaseModalOpen(false)}
         onMessage={showToast}
+        onSwitchAccount={vault.switchAccount}
       />
     </div>
   );

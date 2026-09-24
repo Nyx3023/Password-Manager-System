@@ -147,6 +147,29 @@ export async function vaultExists(): Promise<boolean> {
   return (await loadVaultFile()) !== null;
 }
 
+/**
+ * Retrieve account ownership info from vault envelope header without decrypting payload.
+ * Returns null if no vault exists on disk.
+ */
+export async function getVaultOwnerInfo(): Promise<{
+  ownerUid?: string;
+  ownerEmail?: string;
+  vaultId?: string;
+} | null> {
+  const raw = await loadVaultFile();
+  if (!raw) return null;
+  try {
+    const obj = JSON.parse(raw) as Record<string, unknown>;
+    return {
+      ownerUid: typeof obj.ownerUid === "string" ? obj.ownerUid : undefined,
+      ownerEmail: typeof obj.ownerEmail === "string" ? obj.ownerEmail : undefined,
+      vaultId: typeof obj.vaultId === "string" ? obj.vaultId : undefined,
+    };
+  } catch {
+    return null;
+  }
+}
+
 export async function loadPrefs(): Promise<AppPrefs> {
   const raw = await readDataFile(PREFS_FILE);
   return raw ? { ...defaultPrefs, ...(JSON.parse(raw) as AppPrefs) } : defaultPrefs;
@@ -156,24 +179,65 @@ export async function savePrefs(prefs: AppPrefs): Promise<void> {
   await writeDataFile(PREFS_FILE, JSON.stringify(prefs));
 }
 
-/** Wipe vault, prefs, and cached icons (development / factory reset). */
+const ALL_DATA_FILES = [
+  VAULT_FILE,
+  VAULT_BACKUP_FILE,
+  "vault.enc.json.bak.1",
+  "vault.enc.json.bak.2",
+  "vault.enc.json.bak.3",
+  VAULT_TEMP_FILE,
+  PREFS_FILE,
+  "mpin-device.json",
+  "unlock-attempts.json",
+  "firebase_sync_state.json",
+  "lan-pairing.json",
+];
+
+/**
+ * Clear only the active vault working slot files without factory-resetting the entire app.
+ * Keeps cached accounts, custom settings, and persistent Google auth storage intact.
+ */
+export async function clearActiveVaultSlot(): Promise<void> {
+  const activeSlotFiles = [
+    VAULT_FILE,
+    VAULT_BACKUP_FILE,
+    "vault.enc.json.bak.1",
+    "vault.enc.json.bak.2",
+    "vault.enc.json.bak.3",
+    VAULT_TEMP_FILE,
+    "mpin-device.json",
+    "unlock-attempts.json",
+  ];
+  for (const path of activeSlotFiles) {
+    try {
+      await deleteDataFile(path);
+    } catch {}
+  }
+}
+
+/** Wipe vault, backups, MPIN, sync state, prefs, and cached icons (factory reset). */
 export async function resetAllAppData(): Promise<void> {
   if (useElectronStorage()) {
-    for (const path of [VAULT_FILE, VAULT_BACKUP_FILE, VAULT_TEMP_FILE, PREFS_FILE]) {
+    for (const path of ALL_DATA_FILES) {
       await deleteDataFile(path);
     }
     return;
   }
 
   if (!Capacitor.isNativePlatform()) {
-    sessionStorage.removeItem(VAULT_FILE);
-    sessionStorage.removeItem(VAULT_BACKUP_FILE);
-    sessionStorage.removeItem(VAULT_TEMP_FILE);
-    sessionStorage.removeItem(PREFS_FILE);
+    try {
+      sessionStorage.clear();
+    } catch {}
+    try {
+      localStorage.clear();
+    } catch {}
+    for (const path of ALL_DATA_FILES) {
+      memoryStorage.delete(path);
+    }
     return;
   }
 
-  for (const path of [VAULT_FILE, VAULT_BACKUP_FILE, VAULT_TEMP_FILE, PREFS_FILE]) {
+  for (const path of ALL_DATA_FILES) {
     await deleteDataFile(path);
   }
 

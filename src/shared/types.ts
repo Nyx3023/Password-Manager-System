@@ -65,6 +65,8 @@ export interface VaultEntry {
 export interface VaultPayload {
   version: 2;
   vaultId?: string;
+  ownerUid?: string;
+  ownerEmail?: string;
   people: Person[];
   entries: VaultEntry[];
   deletedEntries?: DeletedEntryTombstone[];
@@ -87,6 +89,8 @@ export interface KeyWrap {
 export interface EncryptedVaultFile {
   version: 2;
   vaultId?: string;
+  ownerUid?: string;
+  ownerEmail?: string;
   kdf: "argon2id";
   cipher: "aes-256-gcm";
   /** Master password wrap (always present). */
