@@ -11,10 +11,10 @@
 ; OUTPUT: dist-electron\PasswordManagerSetup.exe
 ; ============================================================
 
-#define MyAppName      "Password Manager"
+#define MyAppName      "SecureX"
 #define MyAppVersion   "1.0.0"
-#define MyAppPublisher "Nyx"
-#define MyAppExeName   "PasswordManager.exe"
+#define MyAppPublisher "SecureX"
+#define MyAppExeName   "SecureX.exe"
 #define MyAppId        "{{A1B2C3D4-E5F6-7890-ABCD-EF1234567890}"
 #define SourceDir      "dist-electron\win-unpacked"
 #define DesktopDir     "desktop"
@@ -26,9 +26,9 @@ AppId={#MyAppId}
 AppName={#MyAppName}
 AppVersion={#MyAppVersion}
 AppPublisher={#MyAppPublisher}
-AppPublisherURL=https://github.com/
-AppSupportURL=https://github.com/
-AppUpdatesURL=https://github.com/
+AppPublisherURL=https://github.com/Nyx3023/Password-Manager-System
+AppSupportURL=https://github.com/Nyx3023/Password-Manager-System
+AppUpdatesURL=https://github.com/Nyx3023/Password-Manager-System/releases
 
 ; --- Installation directory ---
 DefaultDirName={autopf}\{#MyAppName}
@@ -37,7 +37,7 @@ DisableProgramGroupPage=yes
 
 ; --- Output ---
 OutputDir=dist-electron
-OutputBaseFilename=PasswordManagerSetup
+OutputBaseFilename=SecureXSetup
 Compression=lzma2/ultra64
 SolidCompression=yes
 InternalCompressLevel=ultra64
@@ -197,14 +197,14 @@ begin
   //    The BAT launches nativeHost.cjs using the Electron executable as the runtime.
   BatContent :=
     '@echo off' + #13#10 +
-    '"' + AppDir + '\PasswordManager.exe" "' + DesktopDir + '\nativeHost.cjs"' + #13#10;
+    '"' + AppDir + '\SecureX.exe" "' + DesktopDir + '\nativeHost.cjs"' + #13#10;
   WriteFilePlain(BatPath, BatContent);
 
   // 2. Write the Chromium native host manifest
   ChromeManifest :=
     '{' + #13#10 +
     '  "name": "com.passwordmanager.host",' + #13#10 +
-    '  "description": "Password Manager Autofill Host",' + #13#10 +
+    '  "description": "SecureX Autofill Host",' + #13#10 +
     '  "path": "' + EscapeBackslashes(BatPath) + '",' + #13#10 +
     '  "type": "stdio",' + #13#10 +
     '  "allowed_origins": [' + #13#10 +
@@ -217,7 +217,7 @@ begin
   MozillaManifest :=
     '{' + #13#10 +
     '  "name": "com.passwordmanager.host",' + #13#10 +
-    '  "description": "Password Manager Autofill Host",' + #13#10 +
+    '  "description": "SecureX Autofill Host",' + #13#10 +
     '  "path": "' + EscapeBackslashes(BatPath) + '",' + #13#10 +
     '  "type": "stdio",' + #13#10 +
     '  "allowed_extensions": [' + #13#10 +
@@ -251,7 +251,7 @@ begin
   ExtPage := CreateCustomPage(
     wpFinished,
     'Browser Extension Auto-Setup',
-    'The Password Manager browser extension is being configured.'
+    'The SecureX browser extension is being configured.'
   );
 
   ExtTitle := TLabel.Create(ExtPage);
@@ -289,7 +289,7 @@ begin
     ExtLabel.Caption :=
       'For Google Chrome and Microsoft Edge:' + #13#10 +
       '  1. Close and reopen Chrome or Edge.' + #13#10 +
-      '  2. A prompt will appear: "Password Manager Autofill was added."' + #13#10 +
+      '  2. A prompt will appear: "SecureX Autofill was added."' + #13#10 +
       '  3. Click "Enable extension" — done! No ID copying required.' + #13#10 + #13#10 +
       'For Firefox and Zen Browser:' + #13#10 +
       '  1. Open about:debugging in your browser.' + #13#10 +

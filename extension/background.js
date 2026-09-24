@@ -60,3 +60,15 @@ chrome.runtime.onMessage.addListener((message, sender, sendResponse) => {
     return true;
   }
 });
+
+// Global keyboard shortcut handler (Ctrl+Shift+L)
+chrome.commands.onCommand.addListener((command) => {
+  if (command === "fill-credentials") {
+    chrome.tabs.query({ active: true, currentWindow: true }, (tabs) => {
+      if (tabs[0]?.id) {
+        chrome.tabs.sendMessage(tabs[0].id, { type: "TRIGGER_AUTOFILL_SHORTCUT" });
+      }
+    });
+  }
+});
+

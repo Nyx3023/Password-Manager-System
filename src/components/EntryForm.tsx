@@ -5,8 +5,6 @@ import { colorForId, groupPeopleByCategory } from "@/shared/people";
 import type { Person, VaultEntry } from "@/shared/types";
 import { PersonAvatar, ServiceIcon } from "./ServiceIcon";
 import { getSubcategory } from "@/shared/catalog";
-import { CustomFieldsEditor } from "./CustomFields";
-import { TotpDisplay } from "./TotpDisplay";
 
 interface EntryFormProps {
   initial: VaultEntry;
@@ -187,21 +185,6 @@ export function EntryForm({
         />
       </label>
 
-      <label>
-        2FA / Authenticator Secret (TOTP)
-        <input
-          value={form.totpSeed}
-          onChange={(ev) => setForm((f) => ({ ...f, totpSeed: ev.target.value.replace(/\s/g, "").toUpperCase() }))}
-          placeholder="e.g. JBSWY3DPEHPK3PXP"
-          style={{ fontFamily: "monospace" }}
-        />
-      </label>
-      {form.totpSeed && <TotpDisplay secret={form.totpSeed} label="Live Code Preview" />}
-
-      <CustomFieldsEditor
-        fields={form.customFields}
-        onChange={(customFields) => setForm((f) => ({ ...f, customFields }))}
-      />
 
       <label>
         Notes

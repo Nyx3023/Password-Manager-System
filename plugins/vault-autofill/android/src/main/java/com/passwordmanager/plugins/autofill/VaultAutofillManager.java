@@ -32,13 +32,12 @@ public class VaultAutofillManager {
      * Check if this app's AutofillService is the currently selected one.
      */
     public boolean isAutofillServiceEnabled(Context context) {
-        String enabled = Settings.Secure.getString(
-                context.getContentResolver(),
-                Settings.Secure.ENABLED_ACCESSIBILITY_SERVICES
-        );
-        String component = context.getPackageName() + "/.autofill.VaultAutofillService";
-        if (enabled == null) return false;
-        return enabled.toLowerCase().contains(component.toLowerCase());
+        if (android.os.Build.VERSION.SDK_INT >= android.os.Build.VERSION_CODES.O) {
+            android.view.autofill.AutofillManager afm =
+                    context.getSystemService(android.view.autofill.AutofillManager.class);
+            return afm != null && afm.hasEnabledAutofillServices();
+        }
+        return false;
     }
 
     /**

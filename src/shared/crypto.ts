@@ -28,10 +28,69 @@ export function randomBytes(length: number): Uint8Array {
   return bytes;
 }
 
-async function deriveKey(
+let workerInstance: Worker | null = null;
+let reqCounter = 0;
+const pendingWorkerRequests = new Map<
+  number,
+  { resolve: (val: Uint8Array) => void; reject: (err: any) => void }
+>();
+
+function getWorker(): Worker | null {
+  if (typeof window === "undefined" || typeof Worker === "undefined") return null;
+  if (!workerInstance) {
+    try {
+      workerInstance = new Worker(
+        new URL("./argon2.worker.ts", import.meta.url),
+        { type: "module" },
+      );
+      workerInstance.onmessage = (e: MessageEvent) => {
+        const { id, ok, hash, error } = e.data;
+        const pending = pendingWorkerRequests.get(id);
+        if (pending) {
+          pendingWorkerRequests.delete(id);
+          if (ok) {
+            pending.resolve(new Uint8Array(hash));
+          } else {
+            pending.reject(new Error(error));
+          }
+        }
+      };
+      workerInstance.onerror = () => {
+        workerInstance = null;
+      };
+    } catch (_) {
+      workerInstance = null;
+    }
+  }
+  return workerInstance;
+}
+
+export async function deriveKey(
   masterPassword: string,
   salt: Uint8Array,
 ): Promise<Uint8Array> {
+  const worker = getWorker();
+  if (worker) {
+    try {
+      return await new Promise<Uint8Array>((resolve, reject) => {
+        const id = ++reqCounter;
+        pendingWorkerRequests.set(id, { resolve, reject });
+        worker.postMessage({
+          id,
+          password: masterPassword,
+          salt: Array.from(salt),
+          iterations: ARGON2_ITERATIONS,
+          memorySize: ARGON2_MEMORY_KIB,
+          parallelism: ARGON2_PARALLELISM,
+          hashLength: ARGON2_HASH_LENGTH,
+        });
+      });
+    } catch (_) {
+      // Fallback below if worker message fails
+    }
+  }
+
+  // Graceful in-thread fallback (e.g. in test runners / environments without module workers)
   const hash = await argon2id({
     password: masterPassword,
     salt,

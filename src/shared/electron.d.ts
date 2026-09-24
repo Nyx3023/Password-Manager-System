@@ -40,6 +40,32 @@ export interface ElectronAPI {
     text?: string;
     error?: string;
   }>;
+  checkForUpdates?: () => Promise<{
+    status: "update-available" | "up-to-date" | "error";
+    version?: string;
+    releaseNotes?: string;
+    downloadUrl?: string;
+    error?: string;
+  }>;
+  downloadUpdate?: () => Promise<{ ok: boolean; error?: string }>;
+  quitAndInstall?: () => void;
+  onUpdateAvailable?: (
+    handler: (info: { version: string; releaseNotes?: string }) => void,
+  ) => () => void;
+  onUpdateProgress?: (
+    handler: (progress: {
+      percent: number;
+      bytesPerSecond: number;
+      transferred: number;
+      total: number;
+    }) => void,
+  ) => () => void;
+  onUpdateDownloaded?: (
+    handler: (info: { version: string }) => void,
+  ) => () => void;
+  onUpdateError?: (handler: (error: string) => void) => () => void;
+  clearClipboard?: () => Promise<boolean>;
+  writeSecureClipboard?: (text: string) => Promise<boolean>;
 }
 
 declare global {

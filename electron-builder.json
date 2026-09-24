@@ -27,7 +27,7 @@
   "win": {
     "target": [
       {
-        "target": "dir",
+        "target": "nsis",
         "arch": ["x64"]
       }
     ],
@@ -37,5 +37,10 @@
   "nsis": {
     "oneClick": false,
     "allowToChangeInstallationDirectory": true
+  },
+  "publish": {
+    "provider": "github",
+    "owner": "Nyx3023",
+    "repo": "Password-Manager-System"
   }
 }

@@ -1091,7 +1091,7 @@ button:disabled {
 
 .generator-mode-tabs {
   display: grid;
-  grid-template-columns: 1fr 1fr;
+  grid-template-columns: repeat(3, 1fr);
   gap: 8px;
 }
 
@@ -2812,5 +2812,235 @@ button:disabled {
   font-family: var(--font-mono, monospace);
   font-weight: 700;
   color: #fff;
+}
+
+/* --- Emergency Recovery Kit Sheet --- */
+.emergency-kit-container {
+  display: flex;
+  flex-direction: column;
+  gap: 16px;
+}
+
+.emergency-kit-actions {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 12px;
+  padding: 12px 16px;
+  background: var(--surface-2, rgba(255, 255, 255, 0.04));
+  border: 1px solid var(--border);
+  border-radius: 10px;
+}
+
+.emergency-kit-sheet {
+  background: #ffffff;
+  color: #0f172a;
+  border-radius: 8px;
+  padding: 24px 28px;
+  box-shadow: 0 4px 24px rgba(0, 0, 0, 0.25);
+  font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, sans-serif;
+  line-height: 1.45;
+}
+
+.emergency-sheet-header {
+  display: flex;
+  justify-content: space-between;
+  align-items: flex-start;
+  border-bottom: 2px solid #0f172a;
+  padding-bottom: 14px;
+  margin-bottom: 16px;
+}
+
+.emergency-sheet-brand {
+  display: flex;
+  align-items: center;
+  gap: 12px;
+}
+
+.emergency-sheet-logo {
+  font-size: 2rem;
+}
+
+.emergency-sheet-title {
+  font-size: 1.25rem;
+  font-weight: 800;
+  letter-spacing: 0.05em;
+  margin: 0;
+  color: #0f172a;
+}
+
+.emergency-sheet-subtitle {
+  font-size: 0.8rem;
+  color: #475569;
+  font-weight: 500;
+}
+
+.emergency-sheet-badge {
+  font-size: 0.68rem;
+  font-weight: 700;
+  letter-spacing: 0.08em;
+  padding: 4px 8px;
+  border: 1.5px solid #0f172a;
+  border-radius: 4px;
+  color: #0f172a;
+  text-transform: uppercase;
+}
+
+.emergency-sheet-warning {
+  background: #fef2f2;
+  border: 1px solid #fecaca;
+  color: #991b1b;
+  font-size: 0.78rem;
+  padding: 8px 12px;
+  border-radius: 6px;
+  margin-bottom: 16px;
+  line-height: 1.4;
+}
+
+.emergency-sheet-grid {
+  display: grid;
+  grid-template-columns: repeat(4, 1fr);
+  gap: 10px;
+  background: #f8fafc;
+  border: 1px solid #e2e8f0;
+  border-radius: 6px;
+  padding: 10px 14px;
+  margin-bottom: 18px;
+}
+
+.emergency-sheet-field {
+  display: flex;
+  flex-direction: column;
+}
+
+.emergency-field-label {
+  font-size: 0.65rem;
+  font-weight: 700;
+  color: #64748b;
+  letter-spacing: 0.06em;
+  text-transform: uppercase;
+}
+
+.emergency-field-value {
+  font-size: 0.85rem;
+  font-weight: 600;
+  color: #0f172a;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.emergency-sheet-section {
+  margin-bottom: 16px;
+}
+
+.emergency-section-header {
+  display: flex;
+  gap: 10px;
+  align-items: baseline;
+  margin-bottom: 8px;
+}
+
+.emergency-section-num {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  width: 20px;
+  height: 20px;
+  background: #0f172a;
+  color: #ffffff;
+  font-size: 0.75rem;
+  font-weight: 700;
+  border-radius: 50%;
+  flex-shrink: 0;
+}
+
+.emergency-section-desc {
+  font-size: 0.75rem;
+  color: #64748b;
+  margin: 2px 0 0;
+}
+
+.emergency-writein-box {
+  border: 1.5px dashed #94a3b8;
+  border-radius: 6px;
+  padding: 14px 16px;
+  background: #fdfdfd;
+}
+
+.emergency-writein-line {
+  border-bottom: 1px solid #cbd5e1;
+  height: 20px;
+}
+
+.emergency-sheet-columns {
+  display: flex;
+  gap: 16px;
+  margin-bottom: 16px;
+}
+
+.emergency-mpin-grid {
+  display: grid;
+  grid-template-columns: repeat(8, 1fr);
+  gap: 6px;
+  border: 1.5px dashed #94a3b8;
+  border-radius: 6px;
+  padding: 10px;
+  background: #fdfdfd;
+}
+
+.emergency-mpin-cell {
+  height: 28px;
+  border-bottom: 2px solid #64748b;
+}
+
+.emergency-instructions-list {
+  margin: 0;
+  padding-left: 20px;
+  font-size: 0.8rem;
+  color: #334155;
+  line-height: 1.5;
+}
+
+.emergency-code {
+  font-family: monospace;
+  font-size: 0.78rem;
+  background: #f1f5f9;
+  padding: 2px 6px;
+  border-radius: 4px;
+}
+
+.emergency-sheet-footer {
+  display: flex;
+  justify-content: space-between;
+  align-items: center;
+  border-top: 1px solid #e2e8f0;
+  padding-top: 10px;
+  margin-top: 14px;
+  font-size: 0.68rem;
+  color: #94a3b8;
+}
+
+@media print {
+  body * {
+    visibility: hidden;
+  }
+  #emergency-sheet-print,
+  #emergency-sheet-print * {
+    visibility: visible;
+  }
+  #emergency-sheet-print {
+    position: absolute;
+    left: 0;
+    top: 0;
+    width: 100%;
+    margin: 0;
+    padding: 16px;
+    box-shadow: none;
+    border: none;
+  }
+  .emergency-kit-no-print {
+    display: none !important;
+  }
 }
 

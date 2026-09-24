@@ -10,7 +10,6 @@ import { colorForId, groupPeopleByCategory } from "@/shared/people";
 import type { Person, PersonCategoryId, VaultEntry } from "@/shared/types";
 import { PersonAvatar, ServiceIcon } from "@/components/ServiceIcon";
 import { PasswordGeneratorPanel } from "@/components/PasswordGeneratorPanel";
-import { CustomFieldsEditor } from "@/components/CustomFields";
 import { TotpDisplay } from "@/components/TotpDisplay";
 
 interface DesktopEntryFormProps {
@@ -424,28 +423,7 @@ export function DesktopEntryForm({
               </label>
             </div>
 
-            <div style={{ marginTop: "1rem", display: "flex", flexDirection: "column", gap: "1rem" }}>
-              <label>
-                2FA / Authenticator Secret (TOTP)
-                <input
-                  value={form.totpSeed}
-                  onChange={(ev) => setForm((f) => ({ ...f, totpSeed: ev.target.value.replace(/\s/g, "").toUpperCase() }))}
-                  placeholder="Optional e.g. JBSWY3DPEHPK3PXP"
-                  style={{ fontFamily: "monospace" }}
-                />
-              </label>
-              {form.totpSeed && <TotpDisplay secret={form.totpSeed} label="Live Code Preview" />}
-            </div>
           </>
-        )}
-
-        {Boolean(initial) && (
-          <div style={{ marginTop: "1rem" }}>
-            <CustomFieldsEditor
-              fields={form.customFields}
-              onChange={(customFields) => setForm((f) => ({ ...f, customFields }))}
-            />
-          </div>
         )}
       </div>
 

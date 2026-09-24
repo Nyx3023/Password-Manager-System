@@ -15,6 +15,29 @@ const net = require("node:net");
 const crypto = require("node:crypto");
 const vaultPaths = require("./vaultPaths.cjs");
 
+let autoUpdater = null;
+try {
+  const updaterModule = require("electron-updater");
+  autoUpdater = updaterModule.autoUpdater;
+  autoUpdater.autoDownload = false;
+  autoUpdater.autoInstallOnAppQuit = true;
+} catch (e) {
+  console.log("[Updater] electron-updater module not loaded:", e.message);
+}
+
+const GITHUB_REPO_OWNER = process.env.VITE_GITHUB_REPO_OWNER || "Nyx3023";
+const GITHUB_REPO_NAME = process.env.VITE_GITHUB_REPO_NAME || "Password-Manager-System";
+
+if (autoUpdater) {
+  try {
+    autoUpdater.setFeedURL({
+      provider: "github",
+      owner: GITHUB_REPO_OWNER,
+      repo: GITHUB_REPO_NAME,
+    });
+  } catch (_) {}
+}
+
 const isDev = !app.isPackaged;
 const VITE_DEV_URL = "http://127.0.0.1:5173/";
 const DIST_INDEX = path.join(__dirname, "..", "dist", "index.html");
@@ -228,6 +251,13 @@ function createWindow() {
     },
   });
 
+  // Security: prevent screen recording, screenshots, and screen shares (Discord, Teams, TeamViewer)
+  try {
+    mainWindow.setContentProtection(true);
+  } catch (err) {
+    console.warn("[Security] setContentProtection failed:", err);
+  }
+
   mainWindow.once("ready-to-show", () => {
     // Strip Electron marker from user agent so Google OAuth allows sign-in popups
     const originalUa = mainWindow.webContents.getUserAgent();
@@ -359,6 +389,104 @@ function registerIpc() {
       args: ["--hidden"],
     });
     return app.getLoginItemSettings().openAtLogin;
+  });
+
+  // --- Auto-Updater IPC ---
+  ipcMain.handle("updater:check", async () => {
+    try {
+      if (isDev || !autoUpdater) {
+        // Query GitHub releases API directly in dev or if native updater unconfigured
+        const https = require("node:https");
+        return new Promise((resolve) => {
+          const req = https.get(
+            `https://api.github.com/repos/${GITHUB_REPO_OWNER}/${GITHUB_REPO_NAME}/releases/latest`,
+            { headers: { "User-Agent": "SecureX-Desktop" } },
+            (res) => {
+              let data = "";
+              res.on("data", (chunk) => (data += chunk));
+              res.on("end", () => {
+                try {
+                  if (res.statusCode === 200) {
+                    const release = JSON.parse(data);
+                    const latest = (release.tag_name || "").replace(/^v/, "").trim();
+                    const current = app.getVersion();
+                    if (latest && latest !== current) {
+                      resolve({
+                        status: "update-available",
+                        version: latest,
+                        releaseNotes: release.body,
+                        downloadUrl: release.html_url,
+                      });
+                      return;
+                    }
+                  }
+                  resolve({ status: "up-to-date", version: app.getVersion() });
+                } catch (_) {
+                  resolve({ status: "up-to-date", version: app.getVersion() });
+                }
+              });
+            }
+          );
+          req.on("error", (err) => resolve({ status: "error", error: err.message }));
+          req.setTimeout(6000, () => {
+            req.destroy();
+            resolve({ status: "error", error: "Request timed out" });
+          });
+        });
+      }
+
+      const res = await autoUpdater.checkForUpdates();
+      if (res && res.updateInfo && res.updateInfo.version !== app.getVersion()) {
+        return {
+          status: "update-available",
+          version: res.updateInfo.version,
+          releaseNotes:
+            typeof res.updateInfo.releaseNotes === "string"
+              ? res.updateInfo.releaseNotes
+              : undefined,
+        };
+      }
+      return { status: "up-to-date", version: app.getVersion() };
+    } catch (err) {
+      return { status: "error", error: err.message };
+    }
+  });
+
+  ipcMain.handle("updater:download", async () => {
+    if (!autoUpdater) return { ok: false, error: "Auto-updater not initialized" };
+    try {
+      await autoUpdater.downloadUpdate();
+      return { ok: true };
+    } catch (err) {
+      return { ok: false, error: err.message };
+    }
+  });
+
+  ipcMain.on("updater:quit-and-install", () => {
+    if (autoUpdater) {
+      autoUpdater.quitAndInstall();
+    }
+  });
+
+  // --- Secure Clipboard IPC ---
+  ipcMain.handle("clipboard:clear", () => {
+    try {
+      const { clipboard } = require("electron");
+      clipboard.clear();
+      return true;
+    } catch (_) {
+      return false;
+    }
+  });
+
+  ipcMain.handle("clipboard:write-secure", (_e, text) => {
+    try {
+      const { clipboard } = require("electron");
+      clipboard.writeText(String(text || ""));
+      return true;
+    } catch (_) {
+      return false;
+    }
   });
 
   // --- Google Sign-In via System Browser (Chrome / Edge) ---
@@ -675,11 +803,50 @@ function startIpcServer() {
   server.listen(PIPE_NAME);
 }
 
+function setupUpdaterListeners() {
+  if (!autoUpdater) return;
+
+  autoUpdater.on("update-available", (info) => {
+    if (mainWindow && !mainWindow.isDestroyed()) {
+      mainWindow.webContents.send("updater:update-available", {
+        version: info.version,
+        releaseNotes: typeof info.releaseNotes === "string" ? info.releaseNotes : undefined,
+      });
+    }
+  });
+
+  autoUpdater.on("download-progress", (progress) => {
+    if (mainWindow && !mainWindow.isDestroyed()) {
+      mainWindow.webContents.send("updater:download-progress", {
+        percent: Math.round(progress.percent),
+        bytesPerSecond: progress.bytesPerSecond,
+        transferred: progress.transferred,
+        total: progress.total,
+      });
+    }
+  });
+
+  autoUpdater.on("update-downloaded", (info) => {
+    if (mainWindow && !mainWindow.isDestroyed()) {
+      mainWindow.webContents.send("updater:update-downloaded", {
+        version: info.version,
+      });
+    }
+  });
+
+  autoUpdater.on("error", (err) => {
+    if (mainWindow && !mainWindow.isDestroyed()) {
+      mainWindow.webContents.send("updater:error", err.message);
+    }
+  });
+}
+
 app.whenReady().then(() => {
   vaultPaths.ensureDataDir(app);
   ipcSessionToken = generateSessionToken(app);
   registerIpc();
   startIpcServer();
+  setupUpdaterListeners();
   createWindow();
   createTray();
 

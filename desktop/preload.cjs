@@ -45,4 +45,29 @@ contextBridge.exposeInMainWorld("electronAPI", {
     ipcRenderer.invoke("google:system-browser-auth", { firebaseConfig }),
   netFetch: (url, options) =>
     ipcRenderer.invoke("net:fetch", { url, ...options }),
+  checkForUpdates: () => ipcRenderer.invoke("updater:check"),
+  downloadUpdate: () => ipcRenderer.invoke("updater:download"),
+  quitAndInstall: () => ipcRenderer.send("updater:quit-and-install"),
+  onUpdateAvailable: (handler) => {
+    const listener = (_e, info) => handler(info);
+    ipcRenderer.on("updater:update-available", listener);
+    return () => ipcRenderer.removeListener("updater:update-available", listener);
+  },
+  onUpdateProgress: (handler) => {
+    const listener = (_e, progress) => handler(progress);
+    ipcRenderer.on("updater:download-progress", listener);
+    return () => ipcRenderer.removeListener("updater:download-progress", listener);
+  },
+  onUpdateDownloaded: (handler) => {
+    const listener = (_e, info) => handler(info);
+    ipcRenderer.on("updater:update-downloaded", listener);
+    return () => ipcRenderer.removeListener("updater:update-downloaded", listener);
+  },
+  onUpdateError: (handler) => {
+    const listener = (_e, err) => handler(err);
+    ipcRenderer.on("updater:error", listener);
+    return () => ipcRenderer.removeListener("updater:error", listener);
+  },
+  clearClipboard: () => ipcRenderer.invoke("clipboard:clear"),
+  writeSecureClipboard: (text) => ipcRenderer.invoke("clipboard:write-secure", text),
 });

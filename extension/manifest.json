@@ -22,6 +22,15 @@
       "run_at": "document_idle"
     }
   ],
+  "commands": {
+    "fill-credentials": {
+      "suggested_key": {
+        "default": "Ctrl+Shift+L",
+        "mac": "Command+Shift+L"
+      },
+      "description": "Autofill credentials for the current page"
+    }
+  },
   "browser_specific_settings": {
     "gecko": {
       "id": "autofill@passwordmanager.com",

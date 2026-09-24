@@ -22,17 +22,22 @@ import {
   type FirebaseSyncState,
   type VaultSyncTarget,
 } from "@/shared/firebaseSync";
+import { UpdateModal } from "./UpdateModal";
+import { EmergencyKitModal } from "./EmergencyKitModal";
+import { CURRENT_APP_VERSION } from "@/shared/updateService";
 
 type SettingsModal =
   | "people"
   | "mpin"
   | "password"
   | "backup"
+  | "emergency"
   | "csv"
   | "autofill"
   | "trash"
   | "totp"
   | "firebase"
+  | "updates"
   | null;
 
 interface SettingsScreenProps {
@@ -224,6 +229,11 @@ export function SettingsScreen(props: SettingsScreenProps) {
           hint="Export or import .pms file"
           onClick={() => setModal("backup")}
         />
+        <SettingsRow
+          label="Emergency recovery kit"
+          hint="Print or download official recovery sheet"
+          onClick={() => setModal("emergency")}
+        />
         {props.vaultTarget && (
           <SettingsRow
             label="Google Cloud Sync"
@@ -285,6 +295,14 @@ export function SettingsScreen(props: SettingsScreenProps) {
           />
         </section>
       )}
+
+      <section className="settings-group">
+        <SettingsRow
+          label="App updates"
+          hint={`Version ${CURRENT_APP_VERSION} • Check GitHub Releases`}
+          onClick={() => setModal("updates")}
+        />
+      </section>
 
       {!window.electronAPI && props.biometricsAvailable && (
         <section className="settings-group">
@@ -548,6 +566,22 @@ export function SettingsScreen(props: SettingsScreenProps) {
           onSwitchAccount={props.onSwitchAccount ? () => { void props.onSwitchAccount?.(); } : undefined}
         />
       )}
+
+      {modal === "updates" && (
+        <UpdateModal
+          open={true}
+          onClose={closeModal}
+          onMessage={props.onMessage}
+        />
+      )}
+
+      <EmergencyKitModal
+        open={modal === "emergency"}
+        onClose={closeModal}
+        ownerEmail={cloudConfig?.ownerEmail}
+        mpinEnabled={props.mpinEnabled}
+        profileCount={props.people.length}
+      />
 
     </div>
   );

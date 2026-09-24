@@ -2,10 +2,12 @@ import { useState } from "react";
 import {
   generatePassword,
   generateWebsiteFormatPassword,
+  generatePassphrase,
   type GeneratorOptions,
+  type PassphraseOptions,
 } from "@/shared/passwordGenerator";
 
-type GeneratorMode = "website" | "random";
+type GeneratorMode = "website" | "random" | "passphrase";
 
 interface PasswordGeneratorPanelProps {
   websiteLabel: string;
@@ -38,6 +40,12 @@ export function PasswordGeneratorPanel({
     digits: true,
     symbols: true,
   });
+  const [passphraseOptions, setPassphraseOptions] = useState<PassphraseOptions>({
+    wordCount: 4,
+    separator: "-",
+    capitalize: true,
+    includeNumber: true,
+  });
   const [preview, setPreview] = useState(() =>
     generateWebsiteFormatPassword(websiteLabel, userLabel),
   );
@@ -45,18 +53,22 @@ export function PasswordGeneratorPanel({
   const refresh = () => {
     if (mode === "website") {
       setPreview(generateWebsiteFormatPassword(websiteLabel, userLabel));
-    } else {
+    } else if (mode === "random") {
       setPreview(generatePassword(genOptions));
+    } else {
+      setPreview(generatePassphrase(passphraseOptions));
     }
   };
 
   const switchMode = (next: GeneratorMode) => {
     setMode(next);
-    setPreview(
-      next === "website"
-        ? generateWebsiteFormatPassword(websiteLabel, userLabel)
-        : generatePassword(genOptions),
-    );
+    if (next === "website") {
+      setPreview(generateWebsiteFormatPassword(websiteLabel, userLabel));
+    } else if (next === "random") {
+      setPreview(generatePassword(genOptions));
+    } else {
+      setPreview(generatePassphrase(passphraseOptions));
+    }
   };
 
   const siteExample = siteTokenPreview(websiteLabel);
@@ -79,17 +91,32 @@ export function PasswordGeneratorPanel({
         >
           Random
         </button>
+        <button
+          type="button"
+          className={`generator-mode-tab${mode === "passphrase" ? " active" : ""}`}
+          onClick={() => switchMode("passphrase")}
+        >
+          Passphrase
+        </button>
       </div>
 
-      {mode === "website" ? (
+      {mode === "website" && (
         <p className="muted small generator-hint">
           Template: <code>WEBSITE_user.######</code>
           <br />
           Example: <code>{siteExample}_{userExample}.123456</code>
         </p>
-      ) : (
+      )}
+
+      {mode === "random" && (
         <p className="muted small generator-hint">
           Random password with letters, numbers, and symbols.
+        </p>
+      )}
+
+      {mode === "passphrase" && (
+        <p className="muted small generator-hint">
+          Memorable passphrase generated using EFF Diceware wordlist.
         </p>
       )}
 
@@ -109,12 +136,11 @@ export function PasswordGeneratorPanel({
               min={8}
               max={48}
               value={genOptions.length}
-              onChange={(e) =>
-                setGenOptions((o) => ({
-                  ...o,
-                  length: Number(e.target.value),
-                }))
-              }
+              onChange={(e) => {
+                const next = { ...genOptions, length: Number(e.target.value) };
+                setGenOptions(next);
+                setPreview(generatePassword(next));
+              }}
             />
           </label>
 
@@ -131,13 +157,95 @@ export function PasswordGeneratorPanel({
                 <input
                   type="checkbox"
                   checked={genOptions[key]}
-                  onChange={(e) =>
-                    setGenOptions((o) => ({ ...o, [key]: e.target.checked }))
-                  }
+                  onChange={(e) => {
+                    const next = { ...genOptions, [key]: e.target.checked };
+                    setGenOptions(next);
+                    try {
+                      setPreview(generatePassword(next));
+                    } catch {
+                      // ignore if none selected
+                    }
+                  }}
                 />
                 {label}
               </label>
             ))}
+          </div>
+        </>
+      )}
+
+      {mode === "passphrase" && (
+        <>
+          <label className="range-label">
+            Words: {passphraseOptions.wordCount ?? 4}
+            <input
+              type="range"
+              min={3}
+              max={8}
+              value={passphraseOptions.wordCount ?? 4}
+              onChange={(e) => {
+                const next = { ...passphraseOptions, wordCount: Number(e.target.value) };
+                setPassphraseOptions(next);
+                setPreview(generatePassphrase(next));
+              }}
+            />
+          </label>
+
+          <div style={{ display: "flex", gap: "8px", alignItems: "center", marginBottom: "8px", flexWrap: "wrap" }}>
+            <span className="muted small">Separator:</span>
+            <div style={{ display: "flex", gap: "6px" }}>
+              {[
+                { label: "Hyphen (-)", value: "-" },
+                { label: "Period (.)", value: "." },
+                { label: "Underscore (_)", value: "_" },
+                { label: "Space ( )", value: " " },
+              ].map((sep) => (
+                <button
+                  key={sep.value}
+                  type="button"
+                  className={`ghost small${passphraseOptions.separator === sep.value ? " active" : ""}`}
+                  style={{
+                    padding: "4px 8px",
+                    borderColor: passphraseOptions.separator === sep.value ? "var(--accent)" : "var(--border)",
+                    color: passphraseOptions.separator === sep.value ? "var(--accent)" : "inherit",
+                  }}
+                  onClick={() => {
+                    const next = { ...passphraseOptions, separator: sep.value };
+                    setPassphraseOptions(next);
+                    setPreview(generatePassphrase(next));
+                  }}
+                >
+                  {sep.label}
+                </button>
+              ))}
+            </div>
+          </div>
+
+          <div className="checks">
+            <label className="check">
+              <input
+                type="checkbox"
+                checked={passphraseOptions.capitalize ?? false}
+                onChange={(e) => {
+                  const next = { ...passphraseOptions, capitalize: e.target.checked };
+                  setPassphraseOptions(next);
+                  setPreview(generatePassphrase(next));
+                }}
+              />
+              Capitalize Words
+            </label>
+            <label className="check">
+              <input
+                type="checkbox"
+                checked={passphraseOptions.includeNumber ?? false}
+                onChange={(e) => {
+                  const next = { ...passphraseOptions, includeNumber: e.target.checked };
+                  setPassphraseOptions(next);
+                  setPreview(generatePassphrase(next));
+                }}
+              />
+              Append Number
+            </label>
           </div>
         </>
       )}

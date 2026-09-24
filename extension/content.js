@@ -2,6 +2,7 @@
 let hasRequested = false;
 let activeDropdown = null;
 let rememberedCredential = null;
+const attachedBadges = new WeakMap();
 
 function removeActiveDropdown() {
   if (activeDropdown) {
@@ -10,48 +11,203 @@ function removeActiveDropdown() {
   }
 }
 
-document.addEventListener("click", (e) => {
-  const target = e.target;
-  if (!target || target.tagName !== "INPUT") {
-    removeActiveDropdown();
-    return;
+function isLoginInput(input) {
+  if (!input || input.tagName !== "INPUT") return false;
+  const type = (input.type || "").toLowerCase();
+  if (type === "password") return true;
+  if (type === "text" || type === "email") {
+    const ac = (input.autocomplete || "").toLowerCase();
+    if (ac === "username" || ac === "email") return true;
+    const name = (input.name || "").toLowerCase();
+    const id = (input.id || "").toLowerCase();
+    const placeholder = (input.placeholder || "").toLowerCase();
+    return (
+      name.includes("user") ||
+      name.includes("login") ||
+      name.includes("email") ||
+      id.includes("user") ||
+      id.includes("login") ||
+      id.includes("email") ||
+      placeholder.includes("user") ||
+      placeholder.includes("email")
+    );
+  }
+  return false;
+}
+
+// Attach in-field badge to input element using Shadow DOM
+function attachFieldBadge(input) {
+  if (attachedBadges.has(input)) return;
+  if (!isLoginInput(input)) return;
+
+  const host = document.createElement("div");
+  host.setAttribute("data-securex-badge", "true");
+  host.style.position = "absolute";
+  host.style.zIndex = "2147483640";
+  host.style.pointerEvents = "auto";
+  host.style.cursor = "pointer";
+
+  const shadow = host.attachShadow({ mode: "closed" });
+  shadow.innerHTML = `
+    <style>
+      .badge-btn {
+        display: flex;
+        align-items: center;
+        justify-content: center;
+        width: 22px;
+        height: 22px;
+        border-radius: 5px;
+        background: #111;
+        border: 1px solid #333;
+        color: #ff4438;
+        font-size: 12px;
+        cursor: pointer;
+        transition: transform 0.15s ease, border-color 0.15s ease, background 0.15s ease;
+        box-shadow: 0 2px 6px rgba(0,0,0,0.4);
+        user-select: none;
+      }
+      .badge-btn:hover {
+        transform: scale(1.1);
+        border-color: #ff4438;
+        background: #1a1a1a;
+      }
+      .tooltip {
+        position: absolute;
+        bottom: calc(100% + 6px);
+        right: 0;
+        background: #111;
+        color: #eee;
+        border: 1px solid #333;
+        font-family: ui-monospace, monospace, sans-serif;
+        font-size: 11px;
+        padding: 4px 8px;
+        border-radius: 4px;
+        white-space: nowrap;
+        opacity: 0;
+        pointer-events: none;
+        transition: opacity 0.2s ease;
+        box-shadow: 0 4px 12px rgba(0,0,0,0.5);
+      }
+      .badge-btn:hover + .tooltip {
+        opacity: 1;
+      }
+    </style>
+    <div class="badge-btn" title="Autofill with SecureX (Ctrl+Shift+L)">
+      🔐
+    </div>
+    <div class="tooltip">SecureX Autofill (Ctrl+Shift+L)</div>
+  `;
+
+  const btn = shadow.querySelector(".badge-btn");
+  btn.addEventListener("click", (e) => {
+    e.preventDefault();
+    e.stopPropagation();
+    input.focus();
+    requestAutofill(input);
+  });
+
+  function updateBadgePosition() {
+    if (!document.body.contains(input) || input.offsetParent === null) {
+      host.style.display = "none";
+      return;
+    }
+    const rect = input.getBoundingClientRect();
+    if (rect.width === 0 || rect.height === 0) {
+      host.style.display = "none";
+      return;
+    }
+    host.style.display = "block";
+    host.style.top = `${rect.top + window.scrollY + (rect.height - 22) / 2}px`;
+    host.style.left = `${rect.right + window.scrollX - 28}px`;
   }
 
-  const type = target.type.toLowerCase();
-  if (type === "password" || type === "text" || type === "email") {
-    // Security: never autofill on non-HTTPS pages
-    if (window.location.protocol !== "https:") {
+  document.body.appendChild(host);
+  attachedBadges.set(input, host);
+
+  updateBadgePosition();
+  window.addEventListener("scroll", updateBadgePosition, { passive: true });
+  window.addEventListener("resize", updateBadgePosition, { passive: true });
+
+  input.addEventListener("focus", updateBadgePosition);
+  input.addEventListener("input", updateBadgePosition);
+}
+
+// Scan page for login inputs and attach badges
+function scanAndAttachBadges() {
+  const inputs = document.querySelectorAll("input");
+  inputs.forEach((inp) => {
+    if (isLoginInput(inp)) {
+      attachFieldBadge(inp);
+    }
+  });
+}
+
+// Initial scan and observer for dynamically inserted forms
+if (document.readyState === "loading") {
+  document.addEventListener("DOMContentLoaded", scanAndAttachBadges);
+} else {
+  scanAndAttachBadges();
+}
+
+const observer = new MutationObserver(() => {
+  scanAndAttachBadges();
+});
+observer.observe(document.body, { childList: true, subtree: true });
+
+// Listen for keyboard shortcut (Ctrl+Shift+L)
+chrome.runtime.onMessage.addListener((message) => {
+  if (message.type === "TRIGGER_AUTOFILL_SHORTCUT") {
+    const active = document.activeElement;
+    if (active && isLoginInput(active)) {
+      requestAutofill(active);
+    } else {
+      const target =
+        document.querySelector("input[type='password']") ||
+        document.querySelector("input[type='text'], input[type='email']");
+      if (target) {
+        target.focus();
+        requestAutofill(target);
+      } else {
+        showPopupMessage("No login field found to autofill.", true);
+      }
+    }
+  }
+});
+
+document.addEventListener(
+  "click",
+  (e) => {
+    const target = e.target;
+    if (!target || target.tagName !== "INPUT") {
+      removeActiveDropdown();
       return;
     }
 
-    // Skip fields that explicitly disable autofill
-    const ac = (target.autocomplete || "").toLowerCase();
-    if (ac === "off" || ac === "new-password") return;
+    const type = target.type.toLowerCase();
+    if (type === "password" || type === "text" || type === "email") {
+      if (window.location.protocol !== "https:" && window.location.hostname !== "localhost") {
+        return;
+      }
 
-    // If we have a remembered credential from step 1 (multi-step login) and clicked password
-    if (rememberedCredential && type === "password" && !target.value) {
-      applyCredential(target, rememberedCredential);
-      return;
+      const ac = (target.autocomplete || "").toLowerCase();
+      if (ac === "off" || ac === "new-password") return;
+
+      if (rememberedCredential && type === "password" && !target.value) {
+        applyCredential(target, rememberedCredential);
+        return;
+      }
+
+      if (isLoginInput(target) && !hasRequested) {
+        hasRequested = true;
+        requestAutofill(target);
+        setTimeout(() => {
+          hasRequested = false;
+        }, 3000);
+      }
     }
-
-    const isLoginField =
-      type === "password" ||
-      target.name.toLowerCase().includes("user") ||
-      target.id.toLowerCase().includes("user") ||
-      target.name.toLowerCase().includes("email") ||
-      target.id.toLowerCase().includes("email") ||
-      target.name.toLowerCase().includes("login") ||
-      target.id.toLowerCase().includes("login");
-
-    if (isLoginField && !hasRequested) {
-      hasRequested = true;
-      requestAutofill(target);
-      setTimeout(() => {
-        hasRequested = false;
-      }, 3000);
-    }
-  }
-}, { capture: true });
+  },
+  { capture: true },
+);
 
 function showPopupMessage(msg, isError = false) {
   const div = document.createElement("div");
@@ -86,8 +242,8 @@ function showCredentialPicker(inputEl, credentials) {
   picker.style.position = "absolute";
   picker.style.top = `${rect.bottom + window.scrollY + 6}px`;
   picker.style.left = `${rect.left + window.scrollX}px`;
-  picker.style.minWidth = `${Math.max(rect.width, 220)}px`;
-  picker.style.maxWidth = "320px";
+  picker.style.minWidth = `${Math.max(rect.width, 240)}px`;
+  picker.style.maxWidth = "340px";
   picker.style.background = "#0d0d0d";
   picker.style.border = "1px solid #333";
   picker.style.borderRadius = "8px";
@@ -109,15 +265,15 @@ function showCredentialPicker(inputEl, credentials) {
 
   credentials.forEach((cred) => {
     const item = document.createElement("div");
-    item.style.padding = "8px 12px";
+    item.style.padding = "10px 14px";
     item.style.cursor = "pointer";
     item.style.display = "flex";
     item.style.flexDirection = "column";
-    item.style.gap = "2px";
+    item.style.gap = "3px";
     item.style.borderBottom = "1px solid #1a1a1a";
 
     item.onmouseenter = () => {
-      item.style.background = "#1a1a1a";
+      item.style.background = "#1c1c1c";
     };
     item.onmouseleave = () => {
       item.style.background = "transparent";
@@ -132,10 +288,10 @@ function showCredentialPicker(inputEl, credentials) {
     const subSpan = document.createElement("span");
     subSpan.style.color = "#888";
     subSpan.style.fontSize = "11px";
-    subSpan.textContent = cred.title || "";
+    subSpan.textContent = cred.title ? `${cred.title} • SecureX` : "SecureX";
 
     item.appendChild(titleSpan);
-    if (cred.title && cred.username) item.appendChild(subSpan);
+    item.appendChild(subSpan);
 
     item.onclick = (e) => {
       e.stopPropagation();
@@ -156,7 +312,9 @@ function applyCredential(activeInput, cred) {
     activeInput.value = cred.password;
     const form = activeInput.closest("form");
     if (form) {
-      const userField = form.querySelector("input[type='text'], input[type='email']");
+      const userField = form.querySelector(
+        "input[type='text'], input[type='email']",
+      );
       if (userField && cred.username) {
         userField.value = cred.username;
         userField.dispatchEvent(new Event("input", { bubbles: true }));
@@ -184,44 +342,58 @@ function applyCredential(activeInput, cred) {
 function requestAutofill(activeInput) {
   const currentUrl = window.location.href;
 
-  chrome.runtime.sendMessage({ type: "REQUEST_AUTOFILL", url: currentUrl }, (response) => {
-    if (!response) return;
+  chrome.runtime.sendMessage(
+    { type: "REQUEST_AUTOFILL", url: currentUrl },
+    (response) => {
+      if (!response) return;
 
-    if (response.status === "LOCKED") {
-      showPopupMessage("SecureX is locked. Unlock it on desktop to autofill.", true);
-      return;
-    }
-
-    if (response.credentials && response.credentials.length > 0) {
-      if (response.credentials.length === 1) {
-        rememberedCredential = response.credentials[0];
-        applyCredential(activeInput, response.credentials[0]);
-      } else {
-        showCredentialPicker(activeInput, response.credentials);
+      if (response.status === "LOCKED") {
+        showPopupMessage(
+          "SecureX is locked. Unlock it on desktop to autofill.",
+          true,
+        );
+        return;
       }
-    }
-  });
+
+      if (response.credentials && response.credentials.length > 0) {
+        if (response.credentials.length === 1) {
+          rememberedCredential = response.credentials[0];
+          applyCredential(activeInput, response.credentials[0]);
+        } else {
+          showCredentialPicker(activeInput, response.credentials);
+        }
+      } else {
+        showPopupMessage("No credentials stored for this site.");
+      }
+    },
+  );
 }
 
 // Prompt to save / update password on form submission
-document.addEventListener("submit", (e) => {
-  const form = e.target;
-  if (!form || form.tagName !== "FORM") return;
+document.addEventListener(
+  "submit",
+  (e) => {
+    const form = e.target;
+    if (!form || form.tagName !== "FORM") return;
 
-  const passInput = form.querySelector("input[type='password']");
-  if (!passInput || !passInput.value) return;
+    const passInput = form.querySelector("input[type='password']");
+    if (!passInput || !passInput.value) return;
 
-  const userInput = form.querySelector("input[type='text'], input[type='email']");
-  const username = userInput ? userInput.value : "";
-  const password = passInput.value;
-  const currentUrl = window.location.href;
+    const userInput = form.querySelector(
+      "input[type='text'], input[type='email']",
+    );
+    const username = userInput ? userInput.value : "";
+    const password = passInput.value;
+    const currentUrl = window.location.href;
 
-  if (rememberedCredential && rememberedCredential.password === password) {
-    return; // Already matched
-  }
+    if (rememberedCredential && rememberedCredential.password === password) {
+      return; // Already matched
+    }
 
-  showSavePrompt({ url: currentUrl, username, password });
-}, true);
+    showSavePrompt({ url: currentUrl, username, password });
+  },
+  true,
+);
 
 function showSavePrompt(cred) {
   const container = document.createElement("div");
@@ -249,7 +421,8 @@ function showSavePrompt(cred) {
 
   document.body.appendChild(container);
 
-  container.querySelector("#securex-save-cancel").onclick = () => container.remove();
+  container.querySelector("#securex-save-cancel").onclick = () =>
+    container.remove();
   container.querySelector("#securex-save-confirm").onclick = () => {
     chrome.runtime.sendMessage({
       type: "SAVE_CREDENTIAL",
