@@ -398,8 +398,10 @@ function registerIpc() {
         // Query GitHub releases API directly in dev or if native updater unconfigured
         const https = require("node:https");
         return new Promise((resolve) => {
+          const isCurrentBeta = app.getVersion().includes("-");
+          const endpoint = isCurrentBeta ? "releases" : "releases/latest";
           const req = https.get(
-            `https://api.github.com/repos/${GITHUB_REPO_OWNER}/${GITHUB_REPO_NAME}/releases/latest`,
+            `https://api.github.com/repos/${GITHUB_REPO_OWNER}/${GITHUB_REPO_NAME}/${endpoint}`,
             { headers: { "User-Agent": "SecureX-Desktop" } },
             (res) => {
               let data = "";
@@ -407,7 +409,12 @@ function registerIpc() {
               res.on("end", () => {
                 try {
                   if (res.statusCode === 200) {
-                    const release = JSON.parse(data);
+                    const parsed = JSON.parse(data);
+                    const release = Array.isArray(parsed) ? parsed[0] : parsed;
+                    if (!release) {
+                      resolve({ status: "up-to-date", version: app.getVersion() });
+                      return;
+                    }
                     const latest = (release.tag_name || "").replace(/^v/, "").trim();
                     const current = app.getVersion();
                     if (latest && latest !== current) {
@@ -435,6 +442,7 @@ function registerIpc() {
         });
       }
 
+      autoUpdater.allowPrerelease = app.getVersion().includes("-");
       const res = await autoUpdater.checkForUpdates();
       if (res && res.updateInfo && res.updateInfo.version !== app.getVersion()) {
         return {

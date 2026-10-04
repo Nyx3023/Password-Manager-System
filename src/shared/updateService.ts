@@ -47,6 +47,24 @@ export function isNewerVersion(current: string, latest: string): boolean {
     if (lv > cv) return true;
     if (lv < cv) return false;
   }
+
+  // Same base semver: final release > prerelease
+  if (current.includes("-") && !latest.includes("-")) {
+    return true;
+  }
+  if (!current.includes("-") && latest.includes("-")) {
+    return false;
+  }
+
+  // Both are prereleases with same base version (e.g. 1.0.2-beta.2 vs 1.0.2-beta.1)
+  if (current.includes("-") && latest.includes("-")) {
+    const getPrereleaseNum = (s: string) => {
+      const match = s.match(/\.([0-9]+)$/);
+      return match ? parseInt(match[1], 10) : 0;
+    };
+    return getPrereleaseNum(latest) > getPrereleaseNum(current);
+  }
+
   return false;
 }
 
@@ -100,7 +118,11 @@ export async function checkForAppUpdates(): Promise<UpdateCheckResult> {
   }
 
   try {
-    const url = `https://api.github.com/repos/${GITHUB_REPO_OWNER}/${GITHUB_REPO_NAME}/releases/latest`;
+    const isPrereleaseChannel = currentVersion.includes("-");
+    const url = isPrereleaseChannel
+      ? `https://api.github.com/repos/${GITHUB_REPO_OWNER}/${GITHUB_REPO_NAME}/releases`
+      : `https://api.github.com/repos/${GITHUB_REPO_OWNER}/${GITHUB_REPO_NAME}/releases/latest`;
+
     const res = await fetch(url, {
       headers: {
         Accept: "application/vnd.github.v3+json",
@@ -122,7 +144,19 @@ export async function checkForAppUpdates(): Promise<UpdateCheckResult> {
       throw new Error(`GitHub API error: ${res.statusText}`);
     }
 
-    const data = await res.json();
+    const payload = await res.json();
+    const data = Array.isArray(payload) ? payload[0] : payload;
+    if (!data) {
+      return {
+        hasUpdate: false,
+        currentVersion,
+        latestVersion: currentVersion,
+        releaseTitle: "Up to date",
+        releaseNotes: "",
+        publishedAt: "",
+        htmlUrl: `https://github.com/${GITHUB_REPO_OWNER}/${GITHUB_REPO_NAME}/releases`,
+      };
+    }
     const rawTag = (data.tag_name as string) || "";
     const latestVersion = rawTag.replace(/^v/, "").trim();
     const hasUpdate = isNewerVersion(currentVersion, latestVersion);
