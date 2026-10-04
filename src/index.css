@@ -2793,3 +2793,221 @@ button:disabled {
   }
 }
 
+/* ==========================================================================
+   Easter Egg: Update Channel Switcher (Nothing Aesthetic)
+   ========================================================================== */
+.settings-group--channel {
+  border-color: rgba(255, 68, 56, 0.3) !important;
+  background: rgba(255, 68, 56, 0.03) !important;
+  animation: channelAppear 0.3s cubic-bezier(0.16, 1, 0.3, 1) forwards;
+}
+
+@keyframes channelAppear {
+  from {
+    opacity: 0;
+    transform: translateY(-6px);
+  }
+  to {
+    opacity: 1;
+    transform: translateY(0);
+  }
+}
+
+.channel-selector-card {
+  padding: 14px;
+}
+
+.channel-selector-header {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  margin-bottom: 4px;
+}
+
+.channel-badge {
+  font-family: var(--font-mono, monospace);
+  font-size: 0.68rem;
+  font-weight: 700;
+  letter-spacing: 0.12em;
+  color: #ff4438;
+  background: rgba(255, 68, 56, 0.12);
+  padding: 2px 8px;
+  border-radius: 4px;
+  border: 1px solid rgba(255, 68, 56, 0.3);
+  text-transform: uppercase;
+}
+
+.channel-title {
+  font-family: var(--font-mono, monospace);
+  font-size: 0.72rem;
+  font-weight: 700;
+  letter-spacing: 0.14em;
+  color: #888;
+  text-transform: uppercase;
+}
+
+.channel-subtitle {
+  font-size: 0.8rem;
+  color: #999;
+  margin: 6px 0 14px;
+  line-height: 1.45;
+}
+
+.channel-toggle-row {
+  display: grid;
+  grid-template-columns: 1fr 1fr;
+  gap: 10px;
+}
+
+.channel-btn {
+  display: flex;
+  flex-direction: column;
+  align-items: flex-start;
+  padding: 12px 14px;
+  background: #141414;
+  border: 1px solid #282828;
+  border-radius: 8px;
+  cursor: pointer;
+  text-align: left;
+  transition: all 0.18s ease;
+  user-select: none;
+}
+
+.channel-btn:hover {
+  background: #1b1b1b;
+  border-color: #383838;
+}
+
+.channel-btn.active {
+  background: #1a1a1a;
+  border-color: #ff4438;
+  box-shadow: 0 0 12px rgba(255, 68, 56, 0.15);
+}
+
+.channel-btn-top {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  width: 100%;
+  margin-bottom: 6px;
+}
+
+.channel-dot {
+  width: 8px;
+  height: 8px;
+  border-radius: 50%;
+  background: #444;
+  transition: background 0.18s ease;
+}
+
+.channel-btn.active .channel-dot {
+  background: #ff4438;
+  box-shadow: 0 0 6px #ff4438;
+}
+
+.channel-name {
+  font-family: var(--font-mono, monospace);
+  font-size: 0.85rem;
+  font-weight: 700;
+  letter-spacing: 0.08em;
+  color: #e0e0e0;
+}
+
+.channel-btn.active .channel-name {
+  color: #fff;
+}
+
+.channel-active-tag {
+  margin-left: auto;
+  font-size: 0.62rem;
+  font-weight: 700;
+  letter-spacing: 0.1em;
+  color: #ff4438;
+  background: rgba(255, 68, 56, 0.1);
+  padding: 1px 6px;
+  border-radius: 3px;
+}
+
+.channel-desc {
+  font-size: 0.72rem;
+  color: #777;
+  line-height: 1.35;
+}
+
+.channel-btn.active .channel-desc {
+  color: #aaa;
+}
+
+/* Channel badge inside version header */
+.channel-badge-pill {
+  font-family: var(--font-mono, monospace);
+  font-size: 0.65rem;
+  font-weight: 700;
+  letter-spacing: 0.1em;
+  padding: 2px 7px;
+  border-radius: 4px;
+  text-transform: uppercase;
+}
+
+.channel-badge-pill.release {
+  color: #10b981;
+  background: rgba(16, 185, 129, 0.12);
+  border: 1px solid rgba(16, 185, 129, 0.3);
+}
+
+.channel-badge-pill.beta {
+  color: #ff9800;
+  background: rgba(255, 152, 0, 0.12);
+  border: 1px solid rgba(255, 152, 0, 0.3);
+}
+
+/* Modal Channel Switcher */
+.modal-channel-switch {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  background: #111;
+  padding: 8px 14px;
+  border-radius: 6px;
+  border: 1px solid #222;
+}
+
+.modal-channel-switch-label {
+  font-family: var(--font-mono, monospace);
+  font-size: 0.72rem;
+  font-weight: 700;
+  letter-spacing: 0.12em;
+  color: #777;
+}
+
+.modal-channel-pills {
+  display: flex;
+  gap: 6px;
+}
+
+.modal-channel-pill {
+  font-family: var(--font-mono, monospace);
+  font-size: 0.72rem;
+  font-weight: 700;
+  letter-spacing: 0.1em;
+  padding: 4px 12px;
+  border-radius: 4px;
+  background: #1a1a1a;
+  color: #888;
+  border: 1px solid #333;
+  cursor: pointer;
+  transition: all 0.15s ease;
+}
+
+.modal-channel-pill:hover {
+  color: #ddd;
+  border-color: #555;
+}
+
+.modal-channel-pill.active {
+  background: #ff4438;
+  color: #fff;
+  border-color: #ff4438;
+}
+
+

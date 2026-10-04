@@ -40,7 +40,7 @@ export interface ElectronAPI {
     text?: string;
     error?: string;
   }>;
-  checkForUpdates?: () => Promise<{
+  checkForUpdates?: (channel?: "release" | "beta") => Promise<{
     status: "update-available" | "up-to-date" | "error";
     version?: string;
     releaseNotes?: string;

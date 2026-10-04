@@ -5,6 +5,7 @@ interface HoldToConfirmButtonProps {
   activeLabel?: string;
   durationMs?: number;
   onConfirm: () => Promise<void> | void;
+  onQuickTap?: () => void;
   disabled?: boolean;
   className?: string;
 }
@@ -14,6 +15,7 @@ export function HoldToConfirmButton({
   activeLabel = "Keep holding to confirm…",
   durationMs = 3000,
   onConfirm,
+  onQuickTap,
   disabled = false,
   className = "",
 }: HoldToConfirmButtonProps) {
@@ -77,9 +79,12 @@ export function HoldToConfirmButton({
 
   const cancelHold = useCallback(() => {
     if (holding && !triggeredRef.current) {
+      if (startTimeRef.current && Date.now() - startTimeRef.current < 450) {
+        onQuickTap?.();
+      }
       reset();
     }
-  }, [holding, reset]);
+  }, [holding, reset, onQuickTap]);
 
   useEffect(() => {
     return () => {

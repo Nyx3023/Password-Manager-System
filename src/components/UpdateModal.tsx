@@ -5,6 +5,10 @@ import {
   CURRENT_APP_VERSION,
   GITHUB_REPO_OWNER,
   GITHUB_REPO_NAME,
+  getUpdateChannel,
+  setUpdateChannel,
+  isChannelUnlocked,
+  type UpdateChannel,
   type UpdateCheckResult,
 } from "@/shared/updateService";
 import { isDesktopApp } from "@/shared/platform";
@@ -23,6 +27,8 @@ export function UpdateModal({ open, onClose, onMessage }: UpdateModalProps) {
   const [downloadPercent, setDownloadPercent] = useState<number | null>(null);
   const [readyToInstall, setReadyToInstall] = useState(false);
   const [errorMsg, setErrorMsg] = useState<string | null>(null);
+  const [channel, setChannelState] = useState<UpdateChannel>(() => getUpdateChannel());
+  const [channelUnlocked] = useState(() => isChannelUnlocked());
 
   useEffect(() => {
     if (open) {
@@ -68,11 +74,12 @@ export function UpdateModal({ open, onClose, onMessage }: UpdateModalProps) {
     return () => unsubs.forEach((u) => u());
   }, [isDesktop, onMessage]);
 
-  const runCheck = async () => {
+  const runCheck = async (channelOverride?: UpdateChannel) => {
     setChecking(true);
     setErrorMsg(null);
     try {
-      const res = await checkForAppUpdates();
+      const activeChannel = channelOverride || channel;
+      const res = await checkForAppUpdates(activeChannel);
       setResult(res);
       if (res.error) setErrorMsg(res.error);
     } catch (err: any) {
@@ -128,8 +135,11 @@ export function UpdateModal({ open, onClose, onMessage }: UpdateModalProps) {
           }}
         >
           <div>
-            <div style={{ fontSize: "0.8rem", color: "#888", textTransform: "uppercase", letterSpacing: "0.05em" }}>
-              Current Version
+            <div style={{ fontSize: "0.8rem", color: "#888", textTransform: "uppercase", letterSpacing: "0.05em", display: "flex", alignItems: "center", gap: "6px" }}>
+              <span>Current Version</span>
+              <span className={`channel-badge-pill ${channel === "beta" ? "beta" : "release"}`}>
+                {channel.toUpperCase()}
+              </span>
             </div>
             <div style={{ fontSize: "1.2rem", fontWeight: 700, fontFamily: "monospace", color: "#fff", marginTop: "2px" }}>
               v{CURRENT_APP_VERSION}
@@ -145,6 +155,41 @@ export function UpdateModal({ open, onClose, onMessage }: UpdateModalProps) {
             {checking ? "Checking..." : "Check Now"}
           </button>
         </div>
+
+        {/* Easter Egg Channel Switcher in UpdateModal if unlocked */}
+        {channelUnlocked && (
+          <div className="modal-channel-switch">
+            <span className="modal-channel-switch-label">CHANNEL:</span>
+            <div className="modal-channel-pills">
+              <button
+                type="button"
+                className={`modal-channel-pill ${channel === "release" ? "active" : ""}`}
+                disabled={checking || downloading}
+                onClick={() => {
+                  setUpdateChannel("release");
+                  setChannelState("release");
+                  onMessage?.("Switched to RELEASE channel");
+                  void runCheck("release");
+                }}
+              >
+                RELEASE
+              </button>
+              <button
+                type="button"
+                className={`modal-channel-pill ${channel === "beta" ? "active" : ""}`}
+                disabled={checking || downloading}
+                onClick={() => {
+                  setUpdateChannel("beta");
+                  setChannelState("beta");
+                  onMessage?.("Switched to BETA channel");
+                  void runCheck("beta");
+                }}
+              >
+                BETA
+              </button>
+            </div>
+          </div>
+        )}
 
         {/* Repository info */}
         <div style={{ fontSize: "0.8rem", color: "#777", display: "flex", alignItems: "center", gap: "6px" }}>

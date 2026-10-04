@@ -45,7 +45,7 @@ contextBridge.exposeInMainWorld("electronAPI", {
     ipcRenderer.invoke("google:system-browser-auth", { firebaseConfig }),
   netFetch: (url, options) =>
     ipcRenderer.invoke("net:fetch", { url, ...options }),
-  checkForUpdates: () => ipcRenderer.invoke("updater:check"),
+  checkForUpdates: (channel) => ipcRenderer.invoke("updater:check", channel),
   downloadUpdate: () => ipcRenderer.invoke("updater:download"),
   quitAndInstall: () => ipcRenderer.send("updater:quit-and-install"),
   onUpdateAvailable: (handler) => {

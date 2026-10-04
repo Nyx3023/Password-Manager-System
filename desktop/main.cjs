@@ -392,14 +392,14 @@ function registerIpc() {
   });
 
   // --- Auto-Updater IPC ---
-  ipcMain.handle("updater:check", async () => {
+  ipcMain.handle("updater:check", async (_event, channel = "release") => {
     try {
+      const isBeta = channel === "beta" || app.getVersion().includes("-");
       if (isDev || !autoUpdater) {
         // Query GitHub releases API directly in dev or if native updater unconfigured
         const https = require("node:https");
         return new Promise((resolve) => {
-          const isCurrentBeta = app.getVersion().includes("-");
-          const endpoint = isCurrentBeta ? "releases" : "releases/latest";
+          const endpoint = isBeta ? "releases" : "releases/latest";
           const req = https.get(
             `https://api.github.com/repos/${GITHUB_REPO_OWNER}/${GITHUB_REPO_NAME}/${endpoint}`,
             { headers: { "User-Agent": "SecureX-Desktop" } },
@@ -442,7 +442,7 @@ function registerIpc() {
         });
       }
 
-      autoUpdater.allowPrerelease = app.getVersion().includes("-");
+      autoUpdater.allowPrerelease = isBeta;
       const res = await autoUpdater.checkForUpdates();
       if (res && res.updateInfo && res.updateInfo.version !== app.getVersion()) {
         return {

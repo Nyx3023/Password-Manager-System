@@ -1,4 +1,4 @@
-import { FormEvent, useEffect, useState, type ReactNode } from "react";
+import { FormEvent, useEffect, useRef, useState, type ReactNode } from "react";
 import { autofillSupported, VaultAutofill } from "@/shared/vaultAutofill";
 import type { ImportMode, Person, PersonCategoryId, TrashEntry } from "@/shared/types";
 import type { TotpAccount } from "@/shared/totp";
@@ -24,7 +24,14 @@ import {
 } from "@/shared/firebaseSync";
 import { UpdateModal } from "./UpdateModal";
 import { EmergencyKitModal } from "./EmergencyKitModal";
-import { CURRENT_APP_VERSION } from "@/shared/updateService";
+import {
+  CURRENT_APP_VERSION,
+  getUpdateChannel,
+  setUpdateChannel,
+  isChannelUnlocked,
+  setChannelUnlocked,
+  type UpdateChannel,
+} from "@/shared/updateService";
 
 type SettingsModal =
   | "people"
@@ -125,6 +132,9 @@ export function SettingsScreen(props: SettingsScreenProps) {
   const [modal, setModal] = useState<SettingsModal>(null);
   const [autofillEnabled, setAutofillEnabled] = useState(false);
   const [cloudConfig, setCloudConfig] = useState<FirebaseSyncState | null>(null);
+  const [channelUnlocked, setChannelUnlockedState] = useState(() => isChannelUnlocked());
+  const [updateChannel, setUpdateChannelState] = useState<UpdateChannel>(() => getUpdateChannel());
+  const deleteTapTimesRef = useRef<number[]>([]);
 
   useEffect(() => {
     return subscribeFirebaseSyncConfig((cfg) => setCloudConfig(cfg));
@@ -299,10 +309,58 @@ export function SettingsScreen(props: SettingsScreenProps) {
       <section className="settings-group">
         <SettingsRow
           label="App updates"
-          hint={`Version ${CURRENT_APP_VERSION} • Check GitHub Releases`}
+          hint={`Version ${CURRENT_APP_VERSION} • ${updateChannel.toUpperCase()} Channel • Check Updates`}
           onClick={() => setModal("updates")}
         />
       </section>
+
+      {channelUnlocked && (
+        <section className="settings-group settings-group--channel">
+          <div className="channel-selector-card">
+            <div className="channel-selector-header">
+              <span className="channel-badge">DEV CHANNEL UNLOCKED</span>
+              <span className="channel-title">UPDATE STREAM</span>
+            </div>
+            <p className="channel-subtitle">
+              Choose which release stream to receive updates from. You can switch back and forth anytime.
+            </p>
+            <div className="channel-toggle-row">
+              <button
+                type="button"
+                className={`channel-btn ${updateChannel === "release" ? "active" : ""}`}
+                onClick={() => {
+                  setUpdateChannel("release");
+                  setUpdateChannelState("release");
+                  props.onMessage("Channel set to RELEASE (Stable)");
+                }}
+              >
+                <div className="channel-btn-top">
+                  <span className="channel-dot" />
+                  <span className="channel-name">RELEASE</span>
+                  {updateChannel === "release" && <span className="channel-active-tag">ACTIVE</span>}
+                </div>
+                <span className="channel-desc">Stable releases for everyday security</span>
+              </button>
+              <button
+                type="button"
+                className={`channel-btn ${updateChannel === "beta" ? "active" : ""}`}
+                onClick={() => {
+                  setUpdateChannel("beta");
+                  setUpdateChannelState("beta");
+                  props.onMessage("Channel set to BETA (Preview)");
+                }}
+              >
+                <div className="channel-btn-top">
+                  <span className="channel-dot" />
+                  <span className="channel-name">BETA</span>
+                  {updateChannel === "beta" && <span className="channel-active-tag">ACTIVE</span>}
+                </div>
+                <span className="channel-desc">Preview builds with experimental features</span>
+              </button>
+            </div>
+          </div>
+        </section>
+      )}
 
       {!window.electronAPI && props.biometricsAvailable && (
         <section className="settings-group">
@@ -359,6 +417,27 @@ export function SettingsScreen(props: SettingsScreenProps) {
               label="Hold to Delete Account & Passwords"
               activeLabel="Keep holding to delete…"
               durationMs={3000}
+              onQuickTap={() => {
+                const now = Date.now();
+                deleteTapTimesRef.current = [
+                  ...deleteTapTimesRef.current.filter((t) => now - t < 2500),
+                  now,
+                ];
+                if (deleteTapTimesRef.current.length >= 5) {
+                  deleteTapTimesRef.current = [];
+                  const nextState = !channelUnlocked;
+                  setChannelUnlockedState(nextState);
+                  setChannelUnlocked(nextState);
+                  try {
+                    if (navigator.vibrate) navigator.vibrate([40, 50, 40, 50, 90]);
+                  } catch {}
+                  props.onMessage(
+                    nextState
+                      ? "EASTER EGG UNLOCKED: UPDATE CHANNEL OPTIONS REVEALED"
+                      : "UPDATE CHANNEL OPTIONS HIDDEN",
+                  );
+                }
+              }}
               onConfirm={async () => {
                 if (props.onDeleteAccount) {
                   const done = await props.onDeleteAccount();

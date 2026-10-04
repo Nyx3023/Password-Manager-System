@@ -7,6 +7,38 @@ export const GITHUB_REPO_NAME =
 export const CURRENT_APP_VERSION =
   (import.meta.env.VITE_APP_VERSION as string) || "1.0.0";
 
+export type UpdateChannel = "release" | "beta";
+
+const UPDATE_CHANNEL_KEY = "securex:update_channel";
+const CHANNEL_UNLOCKED_KEY = "securex:channel_unlocked";
+
+export function getUpdateChannel(): UpdateChannel {
+  try {
+    const saved = localStorage.getItem(UPDATE_CHANNEL_KEY);
+    if (saved === "beta" || saved === "release") return saved;
+  } catch {}
+  return CURRENT_APP_VERSION.includes("-") ? "beta" : "release";
+}
+
+export function setUpdateChannel(channel: UpdateChannel): void {
+  try {
+    localStorage.setItem(UPDATE_CHANNEL_KEY, channel);
+  } catch {}
+}
+
+export function isChannelUnlocked(): boolean {
+  try {
+    return localStorage.getItem(CHANNEL_UNLOCKED_KEY) === "true";
+  } catch {}
+  return false;
+}
+
+export function setChannelUnlocked(unlocked: boolean): void {
+  try {
+    localStorage.setItem(CHANNEL_UNLOCKED_KEY, unlocked ? "true" : "false");
+  } catch {}
+}
+
 export interface ReleaseAsset {
   name: string;
   size: number;
@@ -24,6 +56,7 @@ export interface UpdateCheckResult {
   apkAsset?: ReleaseAsset;
   desktopAsset?: ReleaseAsset;
   error?: string;
+  channel?: UpdateChannel;
 }
 
 /**
@@ -71,13 +104,17 @@ export function isNewerVersion(current: string, latest: string): boolean {
 /**
  * Check for updates from GitHub Releases API
  */
-export async function checkForAppUpdates(): Promise<UpdateCheckResult> {
+export async function checkForAppUpdates(
+  channelOverride?: UpdateChannel,
+): Promise<UpdateCheckResult> {
   const currentVersion = CURRENT_APP_VERSION;
+  const channel = channelOverride || getUpdateChannel();
+  const isBeta = channel === "beta" || currentVersion.includes("-");
 
   // On Desktop, if electronAPI has built-in updater check, prefer that
   if (isDesktopApp() && window.electronAPI?.checkForUpdates) {
     try {
-      const res = await window.electronAPI.checkForUpdates();
+      const res = await window.electronAPI.checkForUpdates(channel);
       if (res.status === "update-available" && res.version) {
         return {
           hasUpdate: true,
@@ -87,6 +124,7 @@ export async function checkForAppUpdates(): Promise<UpdateCheckResult> {
           releaseNotes: res.releaseNotes || "Performance optimizations and improvements.",
           publishedAt: new Date().toISOString(),
           htmlUrl: `https://github.com/${GITHUB_REPO_OWNER}/${GITHUB_REPO_NAME}/releases/tag/v${res.version}`,
+          channel,
         };
       } else if (res.status === "error") {
         if (res.error?.includes("404") || res.error?.includes("releases.atom")) {
@@ -98,6 +136,7 @@ export async function checkForAppUpdates(): Promise<UpdateCheckResult> {
             releaseNotes: "No public GitHub releases published yet.",
             publishedAt: "",
             htmlUrl: `https://github.com/${GITHUB_REPO_OWNER}/${GITHUB_REPO_NAME}/releases`,
+            channel,
           };
         }
         // Fall back to direct GitHub fetch below
@@ -110,6 +149,7 @@ export async function checkForAppUpdates(): Promise<UpdateCheckResult> {
           releaseNotes: "",
           publishedAt: "",
           htmlUrl: `https://github.com/${GITHUB_REPO_OWNER}/${GITHUB_REPO_NAME}/releases`,
+          channel,
         };
       }
     } catch (_) {
@@ -118,8 +158,7 @@ export async function checkForAppUpdates(): Promise<UpdateCheckResult> {
   }
 
   try {
-    const isPrereleaseChannel = currentVersion.includes("-");
-    const url = isPrereleaseChannel
+    const url = isBeta
       ? `https://api.github.com/repos/${GITHUB_REPO_OWNER}/${GITHUB_REPO_NAME}/releases`
       : `https://api.github.com/repos/${GITHUB_REPO_OWNER}/${GITHUB_REPO_NAME}/releases/latest`;
 
