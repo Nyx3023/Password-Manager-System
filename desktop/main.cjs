@@ -448,7 +448,15 @@ function registerIpc() {
       }
       return { status: "up-to-date", version: app.getVersion() };
     } catch (err) {
-      return { status: "error", error: err.message };
+      const msg = String(err?.message || "");
+      if (msg.includes("404") || msg.includes("releases.atom")) {
+        return {
+          status: "up-to-date",
+          version: app.getVersion(),
+          releaseNotes: "No public GitHub releases published yet.",
+        };
+      }
+      return { status: "error", error: msg };
     }
   });
 
@@ -835,8 +843,14 @@ function setupUpdaterListeners() {
   });
 
   autoUpdater.on("error", (err) => {
+    const msg = String(err?.message || "");
+    if (msg.includes("404") || msg.includes("releases.atom")) {
+      // 404 indicates no GitHub releases published yet (or repo is private).
+      // Suppress raw error so UI does not show confusing technical error.
+      return;
+    }
     if (mainWindow && !mainWindow.isDestroyed()) {
-      mainWindow.webContents.send("updater:error", err.message);
+      mainWindow.webContents.send("updater:error", msg);
     }
   });
 }

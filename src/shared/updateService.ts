@@ -4,7 +4,8 @@ export const GITHUB_REPO_OWNER =
   (import.meta.env.VITE_GITHUB_REPO_OWNER as string) || "Nyx3023";
 export const GITHUB_REPO_NAME =
   (import.meta.env.VITE_GITHUB_REPO_NAME as string) || "Password-Manager-System";
-export const CURRENT_APP_VERSION = "1.0.0";
+export const CURRENT_APP_VERSION =
+  (import.meta.env.VITE_APP_VERSION as string) || "1.0.0";
 
 export interface ReleaseAsset {
   name: string;
@@ -70,6 +71,17 @@ export async function checkForAppUpdates(): Promise<UpdateCheckResult> {
           htmlUrl: `https://github.com/${GITHUB_REPO_OWNER}/${GITHUB_REPO_NAME}/releases/tag/v${res.version}`,
         };
       } else if (res.status === "error") {
+        if (res.error?.includes("404") || res.error?.includes("releases.atom")) {
+          return {
+            hasUpdate: false,
+            currentVersion,
+            latestVersion: currentVersion,
+            releaseTitle: "No releases found",
+            releaseNotes: "No public GitHub releases published yet.",
+            publishedAt: "",
+            htmlUrl: `https://github.com/${GITHUB_REPO_OWNER}/${GITHUB_REPO_NAME}/releases`,
+          };
+        }
         // Fall back to direct GitHub fetch below
       } else {
         return {
@@ -119,10 +131,17 @@ export async function checkForAppUpdates(): Promise<UpdateCheckResult> {
     const apk = assets.find((a: any) =>
       typeof a.name === "string" && a.name.toLowerCase().endsWith(".apk"),
     );
-    const exe = assets.find((a: any) =>
-      typeof a.name === "string" &&
-      (a.name.toLowerCase().endsWith(".exe") || a.name.toLowerCase().endsWith(".blockmap")),
-    );
+    const exe =
+      assets.find(
+        (a: any) =>
+          typeof a.name === "string" &&
+          a.name.toLowerCase().includes("setup") &&
+          a.name.toLowerCase().endsWith(".exe"),
+      ) ||
+      assets.find(
+        (a: any) =>
+          typeof a.name === "string" && a.name.toLowerCase().endsWith(".exe"),
+      );
 
     return {
       hasUpdate,

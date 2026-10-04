@@ -1,6 +1,6 @@
 node_modules/
 dist/
-/android/
+dist-electron/
 build/
 .gradle/
 .capacitor/
@@ -8,7 +8,13 @@ build/
 .DS_Store
 .idea/
 local.properties
-dist-electron/
 .env
 .env.local
 .env.*.local
+
+# Android build outputs and machine configs
+android/.gradle/
+android/build/
+android/app/build/
+android/local.properties
+android/.idea/

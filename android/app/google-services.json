@@ -1,0 +1,47 @@
+{
+  "project_info": {
+    "project_number": "872617615365",
+    "project_id": "x-1c353",
+    "storage_bucket": "x-1c353.firebasestorage.app"
+  },
+  "client": [
+    {
+      "client_info": {
+        "mobilesdk_app_id": "1:872617615365:android:474866439f0e8fb805fc6c",
+        "android_client_info": {
+          "package_name": "com.passwordmanager.vault"
+        }
+      },
+      "oauth_client": [
+        {
+          "client_id": "872617615365-lqsqipqvdqreb04s7mpjkjteo7s7qoe3.apps.googleusercontent.com",
+          "client_type": 1,
+          "android_info": {
+            "package_name": "com.passwordmanager.vault",
+            "certificate_hash": "7733370a69211ef0ff29fea8220b91bdf8d664a9"
+          }
+        },
+        {
+          "client_id": "872617615365-sfpnb5t040h18mqc5mc2u4gau2rblup8.apps.googleusercontent.com",
+          "client_type": 3
+        }
+      ],
+      "api_key": [
+        {
+          "current_key": "AIzaSyDFVQ8KxoswJTBZDYGUl2ZbU3NiB_tLSTw"
+        }
+      ],
+      "services": {
+        "appinvite_service": {
+          "other_platform_oauth_client": [
+            {
+              "client_id": "872617615365-sfpnb5t040h18mqc5mc2u4gau2rblup8.apps.googleusercontent.com",
+              "client_type": 3
+            }
+          ]
+        }
+      }
+    }
+  ],
+  "configuration_version": "1"
+}

@@ -372,7 +372,7 @@ export default function AppDesktop() {
               ? `⚡ Cloud: ${cloudConfig.userEmail?.split("@")[0] || "Connected"}`
               : "⚡ Cloud: Offline"}
           </p>
-          <p className="muted small desktop-sidebar-lan-hint">
+          <p className="muted small desktop-sidebar-cloud-hint">
             {cloudConfig?.enabled
               ? `Push live • ${formatLastSync(cloudConfig.lastSyncAt ?? null)}`
               : "Click to sign in with Google"}

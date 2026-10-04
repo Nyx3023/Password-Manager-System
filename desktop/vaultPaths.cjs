@@ -19,7 +19,6 @@ const SAFE_FILES = new Set([
   VAULT_BACKUP_3,
   VAULT_TEMP_FILE,
   PREFS_FILE,
-  "lan-pairing.json",
   "ipc-session.token",
   "mpin-device.json",
   "unlock-attempts.json",

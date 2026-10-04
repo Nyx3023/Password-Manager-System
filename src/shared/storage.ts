@@ -190,7 +190,6 @@ const ALL_DATA_FILES = [
   "mpin-device.json",
   "unlock-attempts.json",
   "firebase_sync_state.json",
-  "lan-pairing.json",
 ];
 
 /**

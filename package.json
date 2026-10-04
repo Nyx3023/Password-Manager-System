@@ -1,6 +1,6 @@
 {
   "name": "securex",
-  "version": "1.0.0",
+  "version": "1.0.1",
   "private": true,
   "description": "SecureX — Offline password vault for Android and Windows desktop",
   "author": "SecureX Team",
@@ -41,8 +41,7 @@
     "jsqr": "^1.4.0",
     "react": "^19.1.0",
     "react-dom": "^19.1.0",
-    "vault-autofill": "file:plugins/vault-autofill",
-    "vault-lan-http": "file:plugins/vault-lan-http"
+    "vault-autofill": "file:plugins/vault-autofill"
   },
   "devDependencies": {
     "@capacitor/cli": "^7.2.0",

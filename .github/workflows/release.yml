@@ -109,12 +109,14 @@ jobs:
         with:
           name: windows-release
           path: release-assets
+          merge-multiple: true
 
       - name: Download Android Artifacts
         uses: actions/download-artifact@v4
         with:
           name: android-release
           path: release-assets
+          merge-multiple: true
 
       - name: Determine Tag
         id: vars
