@@ -39,6 +39,19 @@ jobs:
           ENV_FILE: ${{ secrets.ENV_FILE }}
         run: echo "$ENV_FILE" > .env
 
+      - name: Inject version from tag
+        shell: bash
+        run: |
+          RAW_TAG="${{ github.event.inputs.tag_name }}"
+          if [ -z "$RAW_TAG" ] && [[ "${{ github.ref }}" == refs/tags/* ]]; then
+            RAW_TAG="${GITHUB_REF#refs/tags/}"
+          fi
+          if [ -n "$RAW_TAG" ]; then
+            VERSION="${RAW_TAG#v}"
+            echo "Setting version to $VERSION"
+            npm version "$VERSION" --no-git-tag-version --allow-same-version
+          fi
+
       - name: Build Web Desktop Bundle
         run: npm run build:desktop
 
@@ -96,6 +109,19 @@ jobs:
           mkdir -p ~/.android
           echo "$KEYSTORE_B64" | base64 --decode > ~/.android/debug.keystore
 
+      - name: Inject version from tag
+        run: |
+          RAW_TAG="${{ github.event.inputs.tag_name }}"
+          if [ -z "$RAW_TAG" ] && [[ "${{ github.ref }}" == refs/tags/* ]]; then
+            RAW_TAG="${GITHUB_REF#refs/tags/}"
+          fi
+          if [ -n "$RAW_TAG" ]; then
+            VERSION="${RAW_TAG#v}"
+            echo "Setting version to $VERSION"
+            npm version "$VERSION" --no-git-tag-version --allow-same-version
+            sed -i "s/versionName .*/versionName \"$VERSION\"/" android/app/build.gradle
+          fi
+
       - name: Build Web App & Sync Android
         run: npm run build:android
 
@@ -139,15 +165,22 @@ jobs:
           path: release-assets
           merge-multiple: true
 
-      - name: Determine Tag
+      - name: Determine Tag & Release Type
         id: vars
         run: |
           if [ -n "${{ github.event.inputs.tag_name }}" ]; then
-            echo "tag=${{ github.event.inputs.tag_name }}" >> $GITHUB_OUTPUT
+            TAG="${{ github.event.inputs.tag_name }}"
           elif [[ "${{ github.ref }}" == refs/tags/* ]]; then
-            echo "tag=${GITHUB_REF#refs/tags/}" >> $GITHUB_OUTPUT
+            TAG="${GITHUB_REF#refs/tags/}"
           else
-            echo "tag=v$(node -p "require('./package.json').version")" >> $GITHUB_OUTPUT
+            TAG="v$(node -p "require('./package.json').version")"
+          fi
+          echo "tag=$TAG" >> $GITHUB_OUTPUT
+
+          if [[ "$TAG" =~ -(beta|alpha|rc|preview) ]]; then
+            echo "prerelease=true" >> $GITHUB_OUTPUT
+          else
+            echo "prerelease=false" >> $GITHUB_OUTPUT
           fi
 
       - name: Create / Update GitHub Release
@@ -156,7 +189,7 @@ jobs:
           tag_name: ${{ steps.vars.outputs.tag }}
           name: Release ${{ steps.vars.outputs.tag }}
           draft: false
-          prerelease: false
+          prerelease: ${{ steps.vars.outputs.prerelease == 'true' }}
           generate_release_notes: true
           files: |
             release-assets/*
