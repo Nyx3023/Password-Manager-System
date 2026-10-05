@@ -101,13 +101,10 @@ jobs:
           ENV_FILE: ${{ secrets.ENV_FILE }}
         run: echo "$ENV_FILE" > .env
 
-      - name: Set up Android Debug Keystore
-        if: env.KEYSTORE_B64 != ''
-        env:
-          KEYSTORE_B64: ${{ secrets.ANDROID_KEYSTORE_BASE64 }}
+      - name: Ensure consistent Android Debug Keystore
         run: |
           mkdir -p ~/.android
-          echo "$KEYSTORE_B64" | base64 --decode > ~/.android/debug.keystore
+          cp android/app/debug.keystore ~/.android/debug.keystore
 
       - name: Inject version from tag
         run: |
