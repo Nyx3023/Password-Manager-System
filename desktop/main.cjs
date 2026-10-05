@@ -781,7 +781,7 @@ function registerIpc() {
       server.listen(0, "127.0.0.1", () => {
         serverPort = server.address().port;
         activeOAuthServer = server;
-        shell.openExternal(`http://127.0.0.1:${serverPort}/?state=${sessionNonce}`);
+        shell.openExternal(`http://localhost:${serverPort}/?state=${sessionNonce}`);
       });
 
       server.on("error", (err) => {

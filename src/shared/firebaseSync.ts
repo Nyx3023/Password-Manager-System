@@ -175,8 +175,18 @@ export async function signInWithGoogle(): Promise<{ user: User }> {
     let initialUser: User | null = null;
 
     if (Capacitor.isNativePlatform()) {
-      // Native Android Google Play Services sign-in bottom sheet
-      const result = await FirebaseAuthentication.signInWithGoogle();
+      // Native Android Google Play Services sign-in
+      let result;
+      try {
+        // Try with useCredentialManager: false first to invoke the standard Google Account chooser.
+        // This avoids Android Credential Manager's "[16] No credentials available" error on clean installs.
+        result = await FirebaseAuthentication.signInWithGoogle({ useCredentialManager: false });
+      } catch (err: any) {
+        const msg = String(err?.message || err || "");
+        console.warn("[FirebaseSync] useCredentialManager:false notice:", msg);
+        // Fall back to Credential Manager if account chooser cannot be launched
+        result = await FirebaseAuthentication.signInWithGoogle({ useCredentialManager: true });
+      }
       const idToken = result.credential?.idToken;
       if (!idToken) {
         throw new Error("No Google ID token received from native sign-in.");
