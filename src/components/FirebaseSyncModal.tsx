@@ -173,11 +173,11 @@ export function FirebaseSyncModal({
     setBusy(true);
     try {
       onClose();
+      await signOutFirebase();
       if (onSwitchAccount) {
         await onSwitchAccount();
-        onMessage("Signed out of vault.");
+        onMessage("Signed out of account and vault.");
       } else {
-        await signOutFirebase();
         await reloadData();
         onMessage("Disconnected Google Cloud Sync.");
       }

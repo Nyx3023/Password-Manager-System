@@ -169,12 +169,18 @@ export async function signInWithGoogle(): Promise<{ user: User }> {
   const provider = new GoogleAuthProvider();
   provider.addScope("profile");
   provider.addScope("email");
+  provider.setCustomParameters({ prompt: "select_account" });
 
   try {
     let credential;
     let initialUser: User | null = null;
 
     if (Capacitor.isNativePlatform()) {
+      // Clear previous native sign-in session first so Android Google Play Services presents the account chooser
+      try {
+        await FirebaseAuthentication.signOut();
+      } catch {}
+
       // Native Android Google Play Services sign-in
       let result;
       try {

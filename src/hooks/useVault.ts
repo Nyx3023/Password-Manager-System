@@ -275,12 +275,17 @@ export function useVault() {
       // 2. Stop cloud listener
       stopRemoteVaultSubscription();
 
-      // 3. Clear memory and autofill
+      // 3. Disconnect Firebase / Google session
+      try {
+        await signOutFirebase();
+      } catch {}
+
+      // 4. Clear memory and autofill
       service.lock();
       await clearAutofillSession();
       await disableBiometricUnlock();
 
-      // 4. Wipe active slot files so SetupWizard / account picker is shown (keeps auth tokens intact)
+      // 5. Wipe active slot files so SetupWizard / account picker is shown (keeps auth tokens intact)
       await clearActiveVaultSlot();
 
       // 5. Reset hook states

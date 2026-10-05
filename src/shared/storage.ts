@@ -206,6 +206,7 @@ export async function clearActiveVaultSlot(): Promise<void> {
     VAULT_TEMP_FILE,
     "mpin-device.json",
     "unlock-attempts.json",
+    "firebase_sync_state.json",
   ];
   for (const path of activeSlotFiles) {
     try {

@@ -645,6 +645,7 @@ function registerIpc() {
     provider.addScope('openid');
     provider.addScope('email');
     provider.addScope('profile');
+    provider.setCustomParameters({ prompt: 'select_account' });
 
     async function startAuth() {
       const btn = document.getElementById('auth-btn');
