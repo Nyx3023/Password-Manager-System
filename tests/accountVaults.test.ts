@@ -6,7 +6,13 @@ import {
   removeArchivedVault,
   CACHED_ACCOUNTS_FILE,
 } from "../src/shared/accountVaults";
-import { saveVaultFile, loadVaultFile, resetAllAppData, deleteDataFile } from "../src/shared/storage";
+import {
+  saveVaultFile,
+  loadVaultFile,
+  resetAllAppData,
+  deleteDataFile,
+  clearActiveVaultSlot,
+} from "../src/shared/storage";
 
 describe("accountVaults switching and archiving", () => {
   beforeEach(async () => {
@@ -35,7 +41,7 @@ describe("accountVaults switching and archiving", () => {
     expect(cached[0].email).toBe("user.a@gmail.com");
 
     // 3. Clear active slot
-    await resetAllAppData();
+    await clearActiveVaultSlot();
     expect(await loadVaultFile()).toBeNull();
 
     // 4. Restore User A

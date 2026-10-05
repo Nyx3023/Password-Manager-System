@@ -41,7 +41,7 @@ function sanitizeFileName(name) {
   if (name.startsWith(".")) {
     throw new Error("Invalid file name: hidden files not allowed.");
   }
-  const isAccountFile = /^(vault|mpin)_[a-zA-Z0-9_.-]+\.(enc\.json|json)$/.test(name);
+  const isAccountFile = /^(vault|mpin|auth_session)_[a-zA-Z0-9_.-]+\.(enc\.json|json)$/.test(name);
   if (!SAFE_FILES.has(name) && !isAccountFile && name !== "cached_accounts.json") {
     throw new Error(`Invalid file name: "${name}" is not allowed.`);
   }

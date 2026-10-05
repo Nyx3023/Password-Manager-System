@@ -247,7 +247,7 @@ function createWindow() {
       preload: path.join(__dirname, "preload.cjs"),
       contextIsolation: true,
       nodeIntegration: false,
-      webSecurity: false,
+      webSecurity: true,
     },
   });
 
@@ -264,21 +264,66 @@ function createWindow() {
     const cleanUa = originalUa.replace(/Electron\/[0-9\.]+\s?/, "");
     mainWindow.webContents.setUserAgent(cleanUa);
 
-    // Handle authentication popups cleanly
+    // Handle authentication popups cleanly and securely
     mainWindow.webContents.setWindowOpenHandler(({ url }) => {
-      return {
-        action: "allow",
-        overrideBrowserWindowOptions: {
-          width: 500,
-          height: 650,
-          autoHideMenuBar: true,
-          webPreferences: {
-            nodeIntegration: false,
-            contextIsolation: true,
-            userAgent: cleanUa,
+      let parsedUrl;
+      try {
+        parsedUrl = new URL(url);
+      } catch {
+        return { action: "deny" };
+      }
+
+      // Restrict popups strictly to safe web protocols
+      if (parsedUrl.protocol !== "https:" && parsedUrl.protocol !== "http:") {
+        console.warn("[Security] Denied popup request with non-http(s) scheme:", url);
+        return { action: "deny" };
+      }
+
+      // Check if target is an allowed OAuth/auth provider
+      const isAllowedAuthHost =
+        parsedUrl.hostname === "accounts.google.com" ||
+        parsedUrl.hostname.endsWith(".accounts.google.com") ||
+        parsedUrl.hostname.endsWith(".firebaseapp.com") ||
+        parsedUrl.hostname === "localhost" ||
+        parsedUrl.hostname === "127.0.0.1";
+
+      if (isAllowedAuthHost) {
+        return {
+          action: "allow",
+          overrideBrowserWindowOptions: {
+            width: 500,
+            height: 650,
+            autoHideMenuBar: true,
+            webPreferences: {
+              nodeIntegration: false,
+              contextIsolation: true,
+              webSecurity: true,
+              userAgent: cleanUa,
+            },
           },
-        },
-      };
+        };
+      }
+
+      // General external web links are delegated to user's default browser
+      shell.openExternal(parsedUrl.href);
+      return { action: "deny" };
+    });
+
+    // Guard main window navigation against external redirection
+    mainWindow.webContents.on("will-navigate", (event, navigationUrl) => {
+      try {
+        const parsed = new URL(navigationUrl);
+        if (parsed.hostname === "localhost" || parsed.hostname === "127.0.0.1") {
+          return;
+        }
+      } catch {}
+      event.preventDefault();
+      try {
+        const parsed = new URL(navigationUrl);
+        if (parsed.protocol === "https:" || parsed.protocol === "http:") {
+          shell.openExternal(parsed.href);
+        }
+      } catch {}
     });
 
     mainWindow.show();
@@ -373,9 +418,20 @@ function registerIpc() {
     shell.openPath(extDir);
   });
 
-  // Open a URL in the user's default browser
-  ipcMain.handle("shell:open-url", (_e, url) => {
-    shell.openExternal(url);
+  // Open a URL in the user's default browser (restricted to safe web protocols)
+  ipcMain.handle("shell:open-url", (_e, rawUrl) => {
+    if (typeof rawUrl !== "string") return false;
+    try {
+      const parsed = new URL(rawUrl);
+      if (parsed.protocol === "https:" || parsed.protocol === "http:") {
+        shell.openExternal(parsed.href);
+        return true;
+      }
+    } catch {
+      // Invalid URL format
+    }
+    console.warn("[Security] Blocked attempt to open non-http(s) URL:", rawUrl);
+    return false;
   });
 
   // Windows auto-start on boot
@@ -518,12 +574,19 @@ function registerIpc() {
 
     return new Promise((resolve, reject) => {
       let serverPort = 0;
+      const sessionNonce = crypto.randomBytes(32).toString("hex");
 
       const server = http.createServer((req, res) => {
         try {
           const reqUrl = new URL(req.url, `http://localhost:${serverPort}`);
 
           if (req.method === "GET" && reqUrl.pathname === "/") {
+            if (reqUrl.searchParams.get("state") !== sessionNonce) {
+              res.writeHead(403, { "Content-Type": "text/plain; charset=utf-8" });
+              res.end("Forbidden: Invalid authentication state token.");
+              return;
+            }
+
             const html = `<!DOCTYPE html>
 <html>
 <head>
@@ -575,6 +638,7 @@ function registerIpc() {
     import { getAuth, GoogleAuthProvider, signInWithPopup } from 'https://www.gstatic.com/firebasejs/10.12.0/firebase-auth.js';
 
     const config = ${JSON.stringify(firebaseConfig)};
+    const sessionNonce = ${JSON.stringify(sessionNonce)};
     const app = initializeApp(config);
     const auth = getAuth(app);
     const provider = new GoogleAuthProvider();
@@ -600,11 +664,12 @@ function registerIpc() {
           '<p style="color:#2ea043; font-weight:500;">Authenticated as ' + cred.user.email + '</p>' +
           '<p style="color:#888;">You can close this tab and return to SecureX.</p>';
 
-        await fetch('/callback', {
+        await fetch('/callback?state=' + encodeURIComponent(sessionNonce), {
           method: 'POST',
           headers: { 'Content-Type': 'application/json' },
           body: JSON.stringify({
             ok: true,
+            state: sessionNonce,
             googleIdToken,
             googleAccessToken,
             email: cred.user.email,
@@ -655,11 +720,23 @@ function registerIpc() {
           }
 
           if (req.method === "POST" && reqUrl.pathname === "/callback") {
+            if (reqUrl.searchParams.get("state") !== sessionNonce) {
+              res.writeHead(403, { "Content-Type": "text/plain; charset=utf-8" });
+              res.end("Forbidden: Invalid session state parameter.");
+              return;
+            }
+
             let body = "";
             req.on("data", (chunk) => (body += chunk));
             req.on("end", () => {
               try {
                 const data = JSON.parse(body);
+                if (data.state !== sessionNonce) {
+                  res.writeHead(403, { "Content-Type": "text/plain; charset=utf-8" });
+                  res.end("Forbidden: Session state payload mismatch.");
+                  return;
+                }
+
                 res.writeHead(200, { "Content-Type": "application/json" });
                 res.end(JSON.stringify({ ok: true }));
 
@@ -704,7 +781,7 @@ function registerIpc() {
       server.listen(0, "127.0.0.1", () => {
         serverPort = server.address().port;
         activeOAuthServer = server;
-        shell.openExternal(`http://localhost:${serverPort}/`);
+        shell.openExternal(`http://127.0.0.1:${serverPort}/?state=${sessionNonce}`);
       });
 
       server.on("error", (err) => {
@@ -718,9 +795,17 @@ function registerIpc() {
   // --- Safe HTTP Fetch Proxy (Node OS-level fetch, zero CORS) ---
   ipcMain.handle("net:fetch", async (_e, { url, method, headers, body }) => {
     try {
+      if (typeof url !== "string") {
+        return { ok: false, status: 400, statusText: "Bad Request", error: "Invalid URL" };
+      }
+      const parsedUrl = new URL(url);
+      if (parsedUrl.protocol !== "https:" && parsedUrl.protocol !== "http:") {
+        return { ok: false, status: 400, statusText: "Bad Request", error: "Protocol not allowed" };
+      }
+
       const httpMethod = (method || "GET").toUpperCase();
       const hasBody = httpMethod !== "GET" && httpMethod !== "HEAD" && body != null && body !== "";
-      const res = await fetch(url, {
+      const res = await fetch(parsedUrl.href, {
         method: httpMethod,
         headers: headers || {},
         body: hasBody ? body : undefined,
