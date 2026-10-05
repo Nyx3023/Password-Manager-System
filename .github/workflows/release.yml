@@ -34,10 +34,12 @@ jobs:
 
       - name: Create .env from secret
         shell: bash
-        if: ${{ secrets.ENV_FILE != '' }}
         env:
           ENV_FILE: ${{ secrets.ENV_FILE }}
-        run: echo "$ENV_FILE" > .env
+        run: |
+          if [ -n "$ENV_FILE" ]; then
+            echo "$ENV_FILE" > .env
+          fi
 
       - name: Inject version from tag
         shell: bash
@@ -96,10 +98,12 @@ jobs:
         run: npm ci --legacy-peer-deps
 
       - name: Create .env from secret
-        if: ${{ secrets.ENV_FILE != '' }}
         env:
           ENV_FILE: ${{ secrets.ENV_FILE }}
-        run: echo "$ENV_FILE" > .env
+        run: |
+          if [ -n "$ENV_FILE" ]; then
+            echo "$ENV_FILE" > .env
+          fi
 
       - name: Ensure consistent Android Debug Keystore
         run: |
