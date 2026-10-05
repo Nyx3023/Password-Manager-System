@@ -34,7 +34,7 @@ jobs:
 
       - name: Create .env from secret
         shell: bash
-        if: env.ENV_FILE != ''
+        if: ${{ secrets.ENV_FILE != '' }}
         env:
           ENV_FILE: ${{ secrets.ENV_FILE }}
         run: echo "$ENV_FILE" > .env
@@ -96,7 +96,7 @@ jobs:
         run: npm ci --legacy-peer-deps
 
       - name: Create .env from secret
-        if: env.ENV_FILE != ''
+        if: ${{ secrets.ENV_FILE != '' }}
         env:
           ENV_FILE: ${{ secrets.ENV_FILE }}
         run: echo "$ENV_FILE" > .env
