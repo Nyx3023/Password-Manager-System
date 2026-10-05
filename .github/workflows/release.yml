@@ -120,6 +120,9 @@ jobs:
             echo "Setting version to $VERSION"
             npm version "$VERSION" --no-git-tag-version --allow-same-version
             sed -i "s/versionName .*/versionName \"$VERSION\"/" android/app/build.gradle
+            if [ -n "$GITHUB_RUN_NUMBER" ]; then
+              sed -i "s/versionCode .*/versionCode $((100 + GITHUB_RUN_NUMBER))/" android/app/build.gradle
+            fi
           fi
 
       - name: Build Web App & Sync Android
