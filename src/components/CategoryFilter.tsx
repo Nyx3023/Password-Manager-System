@@ -3,10 +3,11 @@ import { CATEGORIES } from "@/shared/catalog";
 interface CategoryFilterProps {
   active: string | null;
   counts: Record<string, number>;
+  totpCount?: number;
   onChange: (categoryId: string | null) => void;
 }
 
-export function CategoryFilter({ active, counts, onChange }: CategoryFilterProps) {
+export function CategoryFilter({ active, counts, totpCount, onChange }: CategoryFilterProps) {
   return (
     <div className="category-filter" role="tablist" aria-label="Filter by category">
       <button
@@ -16,6 +17,17 @@ export function CategoryFilter({ active, counts, onChange }: CategoryFilterProps
       >
         All
       </button>
+      {Boolean(totpCount && totpCount > 0) && (
+        <button
+          type="button"
+          className={`filter-chip${active === "totp-only" ? " active" : ""}`}
+          onClick={() => onChange(active === "totp-only" ? null : "totp-only")}
+        >
+          <span>⏱️</span>
+          2FA Codes
+          <span className="count">{totpCount}</span>
+        </button>
+      )}
       {CATEGORIES.map((cat) => {
         const count = counts[cat.id] ?? 0;
         if (count === 0) return null;

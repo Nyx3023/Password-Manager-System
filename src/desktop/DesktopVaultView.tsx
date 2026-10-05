@@ -49,6 +49,13 @@ export function DesktopVaultView(props: DesktopVaultViewProps) {
     return counts;
   }, [props.entries]);
 
+  const totpCount = useMemo(() => {
+    return props.entries.filter((entry) => {
+      const e = normalizeEntry(entry);
+      return Boolean(e.totpSeed || e.categoryId === "authenticator");
+    }).length;
+  }, [props.entries]);
+
   return (
     <>
       <div className="desktop-vault-layout">
@@ -65,6 +72,7 @@ export function DesktopVaultView(props: DesktopVaultViewProps) {
             <CategoryFilter
               active={categoryFilter}
               counts={categoryCounts}
+              totpCount={totpCount}
               onChange={setCategoryFilter}
             />
             <div className="desktop-columns-toggle" style={{ display: "flex", gap: "4px", alignItems: "center" }}>

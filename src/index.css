@@ -588,6 +588,139 @@ button:disabled {
 }
 
 /* ============================================================
+   Dedicated Entry Card TOTP Column (Android & Desktop)
+   ============================================================ */
+.entry-card-totp-col {
+  display: flex;
+  align-items: center;
+  flex-shrink: 0;
+  margin-left: auto;
+}
+
+.totp-col-cell {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  background: rgba(255, 255, 255, 0.04);
+  border: 1px solid rgba(255, 255, 255, 0.1);
+  border-radius: 8px;
+  padding: 4px 8px;
+  transition: all 0.2s ease;
+  user-select: none;
+}
+
+.totp-col-cell:hover {
+  background: rgba(255, 255, 255, 0.08);
+  border-color: rgba(255, 255, 255, 0.2);
+}
+
+.totp-col-cell--warning {
+  border-color: rgba(255, 68, 56, 0.35);
+  background: rgba(255, 68, 56, 0.06);
+}
+
+.totp-col-cell--copied {
+  border-color: rgba(16, 185, 129, 0.4);
+  background: rgba(16, 185, 129, 0.08);
+}
+
+.totp-col-info {
+  display: flex;
+  flex-direction: column;
+  align-items: flex-end;
+  gap: 1px;
+}
+
+.totp-col-code {
+  font-family: "NDot57", ui-monospace, monospace;
+  font-size: 0.95rem;
+  font-weight: 700;
+  letter-spacing: 0.08em;
+  color: var(--text, #ffffff);
+  line-height: 1.1;
+}
+
+.totp-col-timer {
+  display: flex;
+  align-items: center;
+  gap: 4px;
+}
+
+.totp-col-ring {
+  transform: rotate(-90deg);
+}
+
+.totp-col-ring-bg {
+  fill: none;
+  stroke: rgba(255, 255, 255, 0.15);
+  stroke-width: 3.5;
+}
+
+.totp-col-ring-fg {
+  fill: none;
+  stroke: var(--accent, #ff4438);
+  stroke-width: 3.5;
+  stroke-linecap: round;
+  transition: stroke-dasharray 1s linear, stroke 0.3s;
+}
+
+.totp-col-cell--warning .totp-col-ring-fg {
+  stroke: #ff4438;
+}
+
+.totp-col-seconds {
+  font-size: 0.68rem;
+  color: #888888;
+  font-family: ui-monospace, monospace;
+  line-height: 1;
+}
+
+.totp-col-cell--warning .totp-col-seconds {
+  color: #ff4438;
+  font-weight: 700;
+}
+
+.totp-col-copy-btn {
+  background: rgba(255, 255, 255, 0.08);
+  color: var(--text, #ffffff);
+  border: 1px solid rgba(255, 255, 255, 0.15);
+  border-radius: 4px;
+  padding: 3px 6px;
+  font-size: 0.68rem;
+  font-weight: 700;
+  letter-spacing: 0.05em;
+  cursor: pointer;
+  transition: all 0.15s ease;
+  font-family: inherit;
+}
+
+.totp-col-copy-btn:hover {
+  background: rgba(255, 255, 255, 0.18);
+  border-color: rgba(255, 255, 255, 0.3);
+}
+
+.totp-col-copy-btn.copied {
+  background: #10b981;
+  color: #000000;
+  border-color: #10b981;
+}
+
+@media (max-width: 480px) {
+  .totp-col-cell {
+    padding: 3px 6px;
+    gap: 6px;
+  }
+  .totp-col-code {
+    font-size: 0.88rem;
+    letter-spacing: 0.05em;
+  }
+  .totp-col-copy-btn {
+    padding: 2px 4px;
+    font-size: 0.62rem;
+  }
+}
+
+/* ============================================================
    Service & person avatars (no remote images)
    ============================================================ */
 .service-icon,

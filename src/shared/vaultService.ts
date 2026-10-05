@@ -780,12 +780,18 @@ export class VaultService {
         existing.updatedAt = timestamp;
         count++;
       } else {
+        const lower = (acc.issuer || acc.name || "").toLowerCase();
+        let subcat = "totp";
+        if (lower.includes("google")) subcat = "google-auth";
+        else if (lower.includes("github")) subcat = "github-auth";
+        else if (lower.includes("microsoft")) subcat = "microsoft-auth";
+
         const newEntry: VaultEntry = {
           id: crypto.randomUUID(),
           title: acc.issuer ? `${acc.issuer} (${acc.name})` : acc.name,
           personId,
-          categoryId: "other",
-          subcategoryId: "other",
+          categoryId: "authenticator",
+          subcategoryId: subcat,
           username: acc.name.includes("@") ? acc.name : "",
           password: "",
           url: "",

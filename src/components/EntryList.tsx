@@ -9,6 +9,7 @@ import {
 import { colorForId } from "@/shared/people";
 import type { Person, VaultEntry } from "@/shared/types";
 import { PersonAvatar, ServiceIcon } from "./ServiceIcon";
+import { TotpColumnCell } from "./TotpColumnCell";
 
 const PAGE_SIZE = 12;
 
@@ -39,7 +40,11 @@ export function EntryList({
   const filtered = useMemo(() => {
     return entries.filter((entry) => {
       const e = normalizeEntry(entry);
-      if (categoryFilter && e.categoryId !== categoryFilter) return false;
+      if (categoryFilter === "totp-only") {
+        if (!e.totpSeed && e.categoryId !== "authenticator") return false;
+      } else if (categoryFilter && e.categoryId !== categoryFilter) {
+        return false;
+      }
       if (personFilter && e.personId !== personFilter) return false;
       if (!normalized) return true;
       return entrySearchText(e, people).includes(normalized);
@@ -116,6 +121,13 @@ export function EntryList({
                   </div>
                   <span className="muted">{entrySubtitle(e)}</span>
                 </div>
+
+                {e.totpSeed && (
+                  <div className="entry-card-totp-col">
+                    <TotpColumnCell secret={e.totpSeed} />
+                  </div>
+                )}
+
                 {person && (
                   <PersonAvatar
                     name={person.name}

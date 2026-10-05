@@ -216,17 +216,46 @@ class SimpleProtobufReader {
 }
 
 /**
+ * Check if a URI is a Google Authenticator migration export URI.
+ */
+export function isGoogleAuthMigrationUri(uri: string): boolean {
+  if (!uri) return false;
+  const trimmed = uri.trim();
+  return trimmed.startsWith("otpauth-migration://") || /otpauth-migration:\/\/offline\?data=/i.test(trimmed);
+}
+
+/**
  * Parse a Google Authenticator export migration URI:
  * otpauth-migration://offline?data=...
  */
 export function parseGoogleAuthMigrationUri(uri: string): TotpAccount[] {
   try {
-    const parsed = new URL(uri.trim());
-    if (parsed.protocol !== "otpauth-migration:") return [];
-    const rawData = parsed.searchParams.get("data");
+    const trimmed = uri.trim();
+    let rawData: string | null = null;
+
+    try {
+      const parsed = new URL(trimmed);
+      if (parsed.protocol === "otpauth-migration:") {
+        rawData = parsed.searchParams.get("data");
+      }
+    } catch {
+      // Fallback to regex if new URL fails on custom protocol
+    }
+
+    if (!rawData) {
+      const match = trimmed.match(/[?&]data=([^&\s]+)/i);
+      if (match) rawData = match[1];
+    }
+
     if (!rawData) return [];
 
-    const binary = atob(rawData);
+    // URL decode, convert URL-safe base64 (- to +, _ to /), and fix padding
+    let cleanData = decodeURIComponent(rawData).replace(/-/g, "+").replace(/_/g, "/");
+    while (cleanData.length % 4 !== 0) {
+      cleanData += "=";
+    }
+
+    const binary = atob(cleanData);
     const bytes = new Uint8Array(binary.length);
     for (let i = 0; i < binary.length; i++) {
       bytes[i] = binary.charCodeAt(i);
@@ -269,9 +298,18 @@ export function parseGoogleAuthMigrationUri(uri: string): TotpAccount[] {
 
         if (secretBytes && secretBytes.length > 0) {
           const secret = base32Encode(secretBytes);
+          let finalName = name;
+          let finalIssuer = issuer;
+
+          if (!finalIssuer && finalName.includes(":")) {
+            const parts = finalName.split(":");
+            finalIssuer = parts[0].trim();
+            finalName = parts.slice(1).join(":").trim();
+          }
+
           accounts.push({
-            name: name || issuer || "Account",
-            issuer: issuer || undefined,
+            name: finalName || finalIssuer || "Account",
+            issuer: finalIssuer || undefined,
             secret,
             digits,
             period: 30,

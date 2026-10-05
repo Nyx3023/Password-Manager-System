@@ -20,6 +20,7 @@ import { formatLastSync } from "@/shared/syncTime";
 import { SettingsScreen } from "./SettingsScreen";
 import { AddEntryWizard } from "./wizard/AddEntryWizard";
 import { TotpAddModal } from "./TotpAddModal";
+import { TotpImporterModal } from "./TotpImporterModal";
 import { useBackHandler } from "@/shared/backButton";
 import {
   loadFirebaseSyncState,
@@ -97,6 +98,7 @@ export function VaultScreen(props: VaultScreenProps) {
   const [adding, setAdding] = useState(false);
   const [showAddChoice, setShowAddChoice] = useState(false);
   const [totpAddOpen, setTotpAddOpen] = useState(false);
+  const [totpImporterOpen, setTotpImporterOpen] = useState(false);
   const [editing, setEditing] = useState(false);
   const [cloudConfig, setCloudConfig] = useState<FirebaseSyncConfig | null>(null);
   const [firebaseModalOpen, setFirebaseModalOpen] = useState(false);
@@ -156,6 +158,13 @@ export function VaultScreen(props: VaultScreenProps) {
       counts[id] = (counts[id] ?? 0) + 1;
     }
     return counts;
+  }, [props.entries]);
+
+  const totpCount = useMemo(() => {
+    return props.entries.filter((entry) => {
+      const e = normalizeEntry(entry);
+      return Boolean(e.totpSeed || e.categoryId === "authenticator");
+    }).length;
   }, [props.entries]);
 
   if (adding) {
@@ -330,6 +339,7 @@ export function VaultScreen(props: VaultScreenProps) {
             <CategoryFilter
               active={categoryFilter}
               counts={categoryCounts}
+              totpCount={totpCount}
               onChange={setCategoryFilter}
             />
 
@@ -443,6 +453,21 @@ export function VaultScreen(props: VaultScreenProps) {
               Scan QR code or enter setup key (like Google Authenticator)
             </div>
           </button>
+
+          <button
+            type="button"
+            className="ghost"
+            style={{ padding: "0.9rem 1rem", fontSize: "0.95rem", textAlign: "left" }}
+            onClick={() => {
+              setShowAddChoice(false);
+              setTotpImporterOpen(true);
+            }}
+          >
+            📲 <strong>Import from Google Authenticator / 2FA</strong>
+            <div style={{ fontSize: "0.75rem", opacity: 0.8, marginTop: "0.2rem" }}>
+              Scan export QR code or upload image to transfer 2FA accounts
+            </div>
+          </button>
         </div>
       </Modal>
 
@@ -451,6 +476,18 @@ export function VaultScreen(props: VaultScreenProps) {
         people={props.people}
         onClose={() => setTotpAddOpen(false)}
         onSave={props.onAdd}
+        onImportTotp={props.onImportTotp}
+        onMessage={props.onMessage}
+      />
+
+      <TotpImporterModal
+        open={totpImporterOpen}
+        people={props.people}
+        onImport={async (accounts, personId) => {
+          if (!props.onImportTotp) return 0;
+          return await props.onImportTotp(accounts, personId);
+        }}
+        onClose={() => setTotpImporterOpen(false)}
         onMessage={props.onMessage}
       />
 

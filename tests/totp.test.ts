@@ -6,6 +6,7 @@ import {
   getTotpTimeRemaining,
   parseOtpauthUri,
   parseGoogleAuthMigrationUri,
+  isGoogleAuthMigrationUri,
   parseAegisJson,
   parse2FasJson,
 } from "../src/shared/totp";
@@ -125,5 +126,45 @@ describe("totp module", () => {
     expect(accounts[0].name).toBe("alice@gmail.com");
     expect(accounts[0].issuer).toBe("Google");
     expect(accounts[0].secret).toBe("JBSWY3DPEHPK3PXP");
+  });
+
+  it("should detect Google Authenticator migration URIs correctly", () => {
+    expect(isGoogleAuthMigrationUri("otpauth-migration://offline?data=xyz")).toBe(true);
+    expect(isGoogleAuthMigrationUri("otpauth://totp/Test?secret=JBSWY3DPEHPK3PXP")).toBe(false);
+    expect(isGoogleAuthMigrationUri("")).toBe(false);
+  });
+
+  it("should parse batch multi-account Google Authenticator exports with URL-safe base64", () => {
+    const secret1 = base32Decode("JBSWY3DPEHPK3PXP");
+    const name1 = new TextEncoder().encode("bob@gmail.com");
+    const sub1 = [
+      (1 << 3) | 2, secret1.length, ...secret1,
+      (2 << 3) | 2, name1.length, ...name1,
+    ];
+
+    const secret2 = base32Decode("MZXW6YTBOI======");
+    const name2 = new TextEncoder().encode("GitHub:charlie");
+    const sub2 = [
+      (1 << 3) | 2, secret2.length, ...secret2,
+      (2 << 3) | 2, name2.length, ...name2,
+    ];
+
+    const mainMessage = [
+      (1 << 3) | 2, sub1.length, ...sub1,
+      (1 << 3) | 2, sub2.length, ...sub2,
+    ];
+
+    const binaryStr = String.fromCharCode(...mainMessage);
+    // Convert to URL-safe base64 with stripped padding
+    const b64 = btoa(binaryStr).replace(/\+/g, "-").replace(/\//g, "_").replace(/=/g, "");
+    const uri = `otpauth-migration://offline?data=${b64}`;
+
+    const accounts = parseGoogleAuthMigrationUri(uri);
+    expect(accounts).toHaveLength(2);
+    expect(accounts[0].name).toBe("bob@gmail.com");
+    expect(accounts[0].secret).toBe("JBSWY3DPEHPK3PXP");
+    expect(accounts[1].issuer).toBe("GitHub");
+    expect(accounts[1].name).toBe("charlie");
+    expect(accounts[1].secret).toBe("MZXW6YTBOI");
   });
 });

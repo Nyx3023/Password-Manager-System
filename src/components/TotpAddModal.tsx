@@ -2,7 +2,12 @@ import { useEffect, useRef, useState } from "react";
 import jsQR from "jsqr";
 import { Modal } from "./Modal";
 import { TotpDisplay } from "./TotpDisplay";
-import { parseOtpauthUri } from "@/shared/totp";
+import {
+  parseOtpauthUri,
+  parseGoogleAuthMigrationUri,
+  isGoogleAuthMigrationUri,
+  type TotpAccount,
+} from "@/shared/totp";
 import { isDesktopApp } from "@/shared/platform";
 import type { Person, VaultEntry } from "@/shared/types";
 
@@ -13,6 +18,7 @@ interface TotpAddModalProps {
   onSave: (
     data: Omit<VaultEntry, "id" | "createdAt" | "updatedAt">,
   ) => Promise<void>;
+  onImportTotp?: (accounts: TotpAccount[], personId: string) => Promise<number>;
   onMessage?: (msg: string) => void;
 }
 
@@ -31,6 +37,7 @@ export function TotpAddModal({
   people,
   onClose,
   onSave,
+  onImportTotp,
   onMessage,
 }: TotpAddModalProps) {
   const isDesktop = isDesktopApp();
@@ -106,7 +113,43 @@ export function TotpAddModal({
     await startCamera(nextFacing);
   };
 
-  const handleDetectedUri = (rawUri: string) => {
+  const handleDetectedUri = async (rawUri: string) => {
+    // 1. Google Authenticator migration export QR code
+    if (isGoogleAuthMigrationUri(rawUri)) {
+      const accounts = parseGoogleAuthMigrationUri(rawUri);
+      if (accounts.length === 0) {
+        setCameraError("Google Authenticator QR code could not be parsed.");
+        scanningRef.current = true;
+        setTrackingBox(null);
+        return;
+      }
+      stopCamera();
+      if (accounts.length === 1) {
+        setAccountName(accounts[0].name || "");
+        setIssuer(accounts[0].issuer || "");
+        setSecretKey(accounts[0].secret || "");
+        setMode("manual");
+        onMessage?.("Google Authenticator account detected!");
+      } else {
+        if (onImportTotp) {
+          try {
+            const count = await onImportTotp(accounts, personId);
+            onMessage?.(`Imported ${count} accounts from Google Authenticator!`);
+            onClose();
+          } catch (e) {
+            setCameraError(e instanceof Error ? e.message : "Batch import failed.");
+          }
+        } else {
+          setAccountName(accounts[0].name || "");
+          setIssuer(accounts[0].issuer || "");
+          setSecretKey(accounts[0].secret || "");
+          setMode("manual");
+          onMessage?.(`Loaded 1 of ${accounts.length} Google Authenticator accounts.`);
+        }
+      }
+      return;
+    }
+
     const parsed = parseOtpauthUri(rawUri);
     if (!parsed) {
       setCameraError("QR code is not a valid TOTP authenticator URI.");
