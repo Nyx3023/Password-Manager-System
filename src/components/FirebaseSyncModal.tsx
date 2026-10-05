@@ -7,6 +7,7 @@ import {
   signOutFirebase,
   syncVaultWithFirebase,
   fetchRemoteVaultFromFirebase,
+  restoreViaGoogleAccount,
   loadFirebaseSyncState,
   saveFirebaseSyncState,
   type FirebaseSyncConfig,
@@ -64,6 +65,11 @@ export function FirebaseSyncModal({
   const [error, setError] = useState<string | null>(null);
   const [showConfig, setShowConfig] = useState(false);
   const [avatarFailed, setAvatarFailed] = useState(false);
+  const [mismatchInfo, setMismatchInfo] = useState<{
+    user: { uid: string; email?: string; displayName?: string; photoURL?: string };
+    currentOwner?: string;
+    message: string;
+  } | null>(null);
 
   // Custom config form state
   const [apiKey, setApiKey] = useState("");
@@ -91,6 +97,7 @@ export function FirebaseSyncModal({
     if (open) {
       void reloadData();
       setError(null);
+      setMismatchInfo(null);
     }
   }, [open, reloadData]);
 
@@ -114,10 +121,19 @@ export function FirebaseSyncModal({
 
       const { user } = await signInWithGoogle();
 
-      // Check 1: If vault is already linked to another account, reject immediately
+      // Check 1: If vault is already linked to another account, detect mismatch
       if (targetUid && targetUid !== user.uid) {
-        await signOutFirebase(user.uid);
         const mismatchMsg = `Account mismatch: This vault belongs to ${targetEmail || targetUid}. Please sign in with ${targetEmail || targetUid}, not ${user.email}.`;
+        setMismatchInfo({
+          user: {
+            uid: user.uid,
+            email: user.email || "Google Account",
+            displayName: user.displayName || undefined,
+            photoURL: user.photoURL || undefined,
+          },
+          currentOwner: targetEmail || targetUid,
+          message: mismatchMsg,
+        });
         setError(mismatchMsg);
         onMessage(mismatchMsg);
         await reloadData();
@@ -128,8 +144,17 @@ export function FirebaseSyncModal({
       if (!vOwner?.ownerUid) {
         const remoteVault = await fetchRemoteVaultFromFirebase();
         if (remoteVault) {
-          await signOutFirebase(user.uid);
-          const existMsg = `Account ${user.email} already has an existing cloud vault. An offline vault cannot overwrite an existing account vault. Please restore your cloud vault from the setup screen.`;
+          const existMsg = `Account ${user.email} already has an existing cloud vault. This local offline vault does not match the cloud vault.`;
+          setMismatchInfo({
+            user: {
+              uid: user.uid,
+              email: user.email || "Google Account",
+              displayName: user.displayName || undefined,
+              photoURL: user.photoURL || undefined,
+            },
+            currentOwner: "Offline Vault",
+            message: existMsg,
+          });
           setError(existMsg);
           onMessage(existMsg);
           await reloadData();
@@ -156,8 +181,24 @@ export function FirebaseSyncModal({
       const res = await syncVaultWithFirebase(vaultTarget);
       if (res.ok) {
         onMessage("Vault synced with Firebase Cloud.");
+        setMismatchInfo(null);
       } else {
         setError(res.error || res.message);
+        if (
+          res.error?.includes("cannot be decrypted with this device's key") ||
+          res.error?.includes("Account mismatch")
+        ) {
+          setMismatchInfo({
+            user: {
+              uid: user.uid,
+              email: user.email || "Google Account",
+              displayName: user.displayName || undefined,
+              photoURL: user.photoURL || undefined,
+            },
+            currentOwner: targetEmail || targetUid,
+            message: res.error,
+          });
+        }
       }
       await reloadData();
     } catch (err: unknown) {
@@ -200,12 +241,51 @@ export function FirebaseSyncModal({
       const result = await syncVaultWithFirebase(vaultTarget);
       if (result.ok) {
         onMessage(result.message);
+        setMismatchInfo(null);
         await reloadData();
       } else {
         setError(result.error || result.message);
+        if (
+          result.error?.includes("cannot be decrypted with this device's key") ||
+          result.error?.includes("Account mismatch")
+        ) {
+          if (syncState?.userId) {
+            setMismatchInfo({
+              user: {
+                uid: syncState.userId,
+                email: syncState.userEmail || "Google Account",
+                displayName: syncState.userName,
+                photoURL: syncState.userPicture,
+              },
+              message: result.error,
+            });
+          }
+        }
       }
     } catch (err: unknown) {
       setError(err instanceof Error ? err.message : "Sync failed");
+    } finally {
+      setBusy(false);
+    }
+  };
+
+  // Restore via Google Account when a vault mismatch is detected
+  const handleRestoreGoogleAccount = async () => {
+    if (!mismatchInfo) return;
+    setBusy(true);
+    setError(null);
+    try {
+      await restoreViaGoogleAccount(mismatchInfo.user);
+      onMessage(`Cloud vault restored for ${mismatchInfo.user.email || "Google account"}. Enter your Master Password.`);
+      onClose();
+      if (onSwitchAccount) {
+        await onSwitchAccount();
+      } else {
+        window.location.reload();
+      }
+    } catch (err: unknown) {
+      const msg = err instanceof Error ? err.message : "Failed to restore cloud vault.";
+      setError(msg);
     } finally {
       setBusy(false);
     }
@@ -263,6 +343,63 @@ export function FirebaseSyncModal({
       <div className="google-drive-sync-modal stack">
         {/* Top notification / error banner */}
         {error && <div className="callout callout--danger">{error}</div>}
+
+        {/* Restore via Google Account (ONLY displayed when vault does not match cloud vault) */}
+        {mismatchInfo && (
+          <div
+            className="callout callout--danger"
+            style={{
+              background: "rgba(255, 68, 56, 0.08)",
+              border: "1px solid rgba(255, 68, 56, 0.35)",
+              borderRadius: "8px",
+              padding: "14px",
+              display: "flex",
+              flexDirection: "column",
+              gap: "8px",
+              textAlign: "left",
+            }}
+          >
+            <div
+              style={{
+                color: "var(--accent, #ff4438)",
+                fontWeight: 700,
+                fontSize: "0.95rem",
+                display: "flex",
+                alignItems: "center",
+                gap: "6px",
+              }}
+            >
+              <span>⚠️</span> Vault Mismatch Detected
+            </div>
+            <p style={{ color: "#eee", fontSize: "0.85rem", margin: 0, lineHeight: 1.4 }}>
+              {mismatchInfo.message}
+            </p>
+            <p style={{ color: "#888", fontSize: "0.75rem", margin: 0 }}>
+              You can restore the cloud vault for <strong>{mismatchInfo.user.email}</strong> onto this device. Your current local vault will be safely archived on this device before restoring.
+            </p>
+            <button
+              type="button"
+              className="primary block"
+              disabled={busy}
+              onClick={handleRestoreGoogleAccount}
+              style={{
+                background: "var(--accent, #ff4438)",
+                color: "#fff",
+                borderColor: "var(--accent, #ff4438)",
+                display: "flex",
+                alignItems: "center",
+                justifyContent: "center",
+                gap: "8px",
+                padding: "10px",
+                marginTop: "4px",
+                fontWeight: 700,
+                cursor: "pointer",
+              }}
+            >
+              <span>🔄</span> Restore via Google Account ({mismatchInfo.user.email})
+            </button>
+          </div>
+        )}
 
         {/* Zero-knowledge security guarantee banner */}
         <div className="callout callout--info">

@@ -80,17 +80,23 @@ export async function archiveCurrentVault(ownerUid?: string, ownerEmail?: string
   }
 
   // Update cached accounts list
-  const accounts = await listCachedAccounts();
-  const existingIdx = accounts.findIndex((a) => a.uid === targetUid);
-  const updated: CachedAccount = {
+  await upsertCachedAccount({
     uid: targetUid,
     email: targetEmail,
     lastUsedAt: new Date().toISOString(),
-  };
+  });
+}
+
+/**
+ * Add or update an entry in the cached accounts registry.
+ */
+export async function upsertCachedAccount(account: CachedAccount): Promise<void> {
+  const accounts = await listCachedAccounts();
+  const existingIdx = accounts.findIndex((a) => a.uid === account.uid);
   if (existingIdx >= 0) {
-    accounts[existingIdx] = updated;
+    accounts[existingIdx] = { ...accounts[existingIdx], ...account, lastUsedAt: new Date().toISOString() };
   } else {
-    accounts.push(updated);
+    accounts.push(account);
   }
   await writeDataFile(CACHED_ACCOUNTS_FILE, JSON.stringify(accounts, null, 2));
 }

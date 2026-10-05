@@ -8,6 +8,23 @@ interface TotpDisplayProps {
   onCopyNotice?: (msg: string) => void;
 }
 
+/**
+ * Generate SVG path for a Google Authenticator-style filled circular pie timer.
+ * Starts from 12 o'clock and fills clockwise according to fraction remaining.
+ */
+function getGoogleAuthPiePath(remaining: number, period = 30, cx = 12, cy = 12, r = 10): string {
+  const fraction = Math.max(0, Math.min(1, remaining / period));
+  if (fraction <= 0.01) return "";
+  if (fraction >= 0.999) {
+    return `M ${cx} ${cy - r} A ${r} ${r} 0 1 1 ${cx - 0.001} ${cy - r} Z`;
+  }
+  const angle = fraction * 2 * Math.PI;
+  const x = cx + r * Math.sin(angle);
+  const y = cy - r * Math.cos(angle);
+  const largeArcFlag = fraction > 0.5 ? 1 : 0;
+  return `M ${cx} ${cy} L ${cx} ${cy - r} A ${r} ${r} 0 ${largeArcFlag} 1 ${x.toFixed(2)} ${y.toFixed(2)} Z`;
+}
+
 export function TotpDisplay({ secret, label = "2FA Code", onCopyNotice }: TotpDisplayProps) {
   const [code, setCode] = useState<string>("------");
   const [remaining, setRemaining] = useState<number>(30);
@@ -43,13 +60,14 @@ export function TotpDisplay({ secret, label = "2FA Code", onCopyNotice }: TotpDi
     await copy(code);
     setCopied(true);
     onCopyNotice?.("2FA Code copied - clears in 30s");
-    setTimeout(() => setCopied(false), 2000);
+    setTimeout(() => setCopied(false), 1500);
   };
 
   if (!secret.trim()) return null;
 
   const formatted = code.length === 6 ? `${code.slice(0, 3)} ${code.slice(3)}` : code;
-  const progressPercent = (remaining / 30) * 100;
+  const isExpiringSoon = remaining <= 5;
+  const piePath = getGoogleAuthPiePath(remaining, 30, 12, 12, 10);
 
   return (
     <div className="detail-row">
@@ -58,7 +76,7 @@ export function TotpDisplay({ secret, label = "2FA Code", onCopyNotice }: TotpDi
         <span
           style={{
             fontSize: "0.75rem",
-            color: remaining <= 5 ? "#ff4438" : "#888",
+            color: isExpiringSoon ? "#ff4438" : "var(--text-dim, #888)",
             fontFamily: "monospace",
           }}
         >
@@ -67,55 +85,46 @@ export function TotpDisplay({ secret, label = "2FA Code", onCopyNotice }: TotpDi
       </div>
 
       <div
-        className="detail-row-value"
+        className={`totp-google-cell${isExpiringSoon ? " totp-google-cell--warning" : ""}${
+          copied ? " totp-google-cell--copied" : ""
+        }`}
         onClick={handleCopy}
-        style={{ cursor: "pointer" }}
-        title="Click to copy 2FA code"
+        title="Tap code to copy"
+        role="button"
+        tabIndex={0}
+        style={{
+          width: "100%",
+          justifyContent: "space-between",
+          padding: "10px 14px",
+          marginTop: "6px",
+        }}
+        onKeyDown={(e) => {
+          if (e.key === "Enter" || e.key === " ") {
+            e.preventDefault();
+            void handleCopy();
+          }
+        }}
       >
-        <div style={{ display: "flex", alignItems: "center", gap: "0.75rem" }}>
-          <span
-            style={{
-              fontFamily: "monospace",
-              fontSize: "1.25rem",
-              fontWeight: 700,
-              letterSpacing: "0.1em",
-              color: remaining <= 5 ? "#ff4438" : "#fff",
-            }}
-          >
+        <div className="totp-google-code-wrap">
+          <span className="totp-google-code" style={{ fontSize: "1.5rem" }}>
             {formatted}
           </span>
-          <div
-            style={{
-              width: "36px",
-              height: "4px",
-              background: "#222",
-              borderRadius: "2px",
-              overflow: "hidden",
-            }}
-          >
-            <div
-              style={{
-                width: `${progressPercent}%`,
-                height: "100%",
-                background: remaining <= 5 ? "#ff4438" : "var(--accent, #ff4438)",
-                transition: "width 1s linear",
-              }}
-            />
-          </div>
+          {copied && <span className="totp-google-copied-pill">COPIED</span>}
         </div>
 
-        <div className="detail-row-actions">
-          <button
-            type="button"
-            className="ghost small"
-            onClick={(e) => {
-              e.stopPropagation();
-              void handleCopy();
-            }}
-            style={copied ? { color: "var(--accent, #ff4438)" } : undefined}
-          >
-            {copied ? "Copied!" : "Copy"}
-          </button>
+        <div className="totp-google-pie-wrap" title={`${remaining}s remaining`}>
+          <svg className="totp-google-pie-svg" width="26" height="26" viewBox="0 0 24 24">
+            {/* Background circle track */}
+            <circle cx="12" cy="12" r="10" fill="rgba(66, 133, 244, 0.15)" />
+            {/* Google Authenticator depleting pie wedge */}
+            {piePath && (
+              <path
+                d={piePath}
+                fill={isExpiringSoon ? "#ff4438" : "#4285f4"}
+                className="totp-google-pie-path"
+              />
+            )}
+          </svg>
         </div>
       </div>
     </div>

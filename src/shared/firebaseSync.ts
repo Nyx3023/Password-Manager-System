@@ -31,7 +31,17 @@ import {
   restoreAccountAuthSession,
   getActiveAccountUid,
 } from "./firebaseConfig";
-import { readDataFile, writeDataFile, deleteDataFile, getVaultOwnerInfo } from "./storage";
+import {
+  readDataFile,
+  writeDataFile,
+  deleteDataFile,
+  getVaultOwnerInfo,
+  saveVaultFile,
+  loadPrefs,
+  savePrefs,
+} from "./storage";
+import { archiveCurrentVault, restoreArchivedVault, upsertCachedAccount } from "./accountVaults";
+import { deleteMpinWrap } from "./mpinStore";
 
 export const FIREBASE_STATE_FILE = "firebase_sync_state.json";
 
@@ -382,6 +392,72 @@ export async function fetchRemoteVaultFromFirebase(): Promise<string | null> {
   // Strip Firestore specific metadata and return standard vault JSON envelope
   const { updatedAt: _up, updatedByDevice: _dev, deleted: _del, deletedAt: _delAt, ...cleanEnvelope } = data;
   return JSON.stringify(cleanEnvelope, null, 2);
+}
+
+/**
+ * Restore a vault via Google account into the active working slot.
+ * This is invoked when the active local vault does not match the Google account's cloud vault.
+ * 1. Safely archives the current local vault to preserve existing data.
+ * 2. Checks local archive cache (vault_${uid}.enc.json) or fetches the remote encrypted vault from Cloud Firestore.
+ * 3. Saves the restored vault into the active working slot (vault.enc.json).
+ * 4. Enables sync and updates account session state.
+ */
+export async function restoreViaGoogleAccount(user: {
+  uid: string;
+  email?: string;
+  displayName?: string;
+  photoURL?: string;
+}): Promise<boolean> {
+  const vOwner = await getVaultOwnerInfo();
+  const currentUid = vOwner?.ownerUid;
+  const currentEmail = vOwner?.ownerEmail;
+
+  // 1. Safely archive current local vault if present
+  await archiveCurrentVault(currentUid, currentEmail);
+
+  // 2. Try restoring from local cached archive first
+  const localRestored = await restoreArchivedVault(user.uid);
+  if (localRestored) {
+    return true;
+  }
+
+  // 3. Download remote encrypted vault from Cloud Firestore
+  const remoteVaultRaw = await fetchRemoteVaultFromFirebase();
+  if (!remoteVaultRaw) {
+    throw new Error(`No cloud vault found for ${user.email || user.uid}.`);
+  }
+
+  // 4. Save into active working slot
+  await saveVaultFile(remoteVaultRaw);
+  await deleteMpinWrap();
+
+  try {
+    const prefs = await loadPrefs();
+    prefs.setupComplete = true;
+    await savePrefs(prefs);
+  } catch {}
+
+  // 5. Update sync state
+  await saveFirebaseSyncState({
+    enabled: true,
+    userId: user.uid,
+    userEmail: user.email,
+    userName: user.displayName,
+    userPicture: user.photoURL,
+    ownerUid: user.uid,
+    ownerEmail: user.email,
+    lastSyncStatus: "idle",
+    lastError: null,
+  });
+
+  // 6. Update cached account registry
+  await upsertCachedAccount({
+    uid: user.uid,
+    email: user.email || "Google Account",
+    lastUsedAt: new Date().toISOString(),
+  });
+
+  return true;
 }
 
 /**

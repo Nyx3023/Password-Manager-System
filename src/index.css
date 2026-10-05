@@ -588,7 +588,7 @@ button:disabled {
 }
 
 /* ============================================================
-   Dedicated Entry Card TOTP Column (Android & Desktop)
+   Google Authenticator Style TOTP Countdown & Column
    ============================================================ */
 .entry-card-totp-col {
   display: flex;
@@ -597,126 +597,104 @@ button:disabled {
   margin-left: auto;
 }
 
-.totp-col-cell {
+.totp-google-cell {
   display: flex;
   align-items: center;
-  gap: 8px;
-  background: rgba(255, 255, 255, 0.04);
-  border: 1px solid rgba(255, 255, 255, 0.1);
+  gap: 10px;
+  padding: 5px 8px;
   border-radius: 8px;
-  padding: 4px 8px;
-  transition: all 0.2s ease;
+  background: rgba(255, 255, 255, 0.03);
+  border: 1px solid rgba(255, 255, 255, 0.08);
+  cursor: pointer;
   user-select: none;
+  transition: all 0.15s ease;
+  position: relative;
 }
 
-.totp-col-cell:hover {
-  background: rgba(255, 255, 255, 0.08);
-  border-color: rgba(255, 255, 255, 0.2);
+.totp-google-cell:hover {
+  background: rgba(66, 133, 244, 0.08);
+  border-color: rgba(66, 133, 244, 0.35);
 }
 
-.totp-col-cell--warning {
+.totp-google-cell--warning {
   border-color: rgba(255, 68, 56, 0.35);
-  background: rgba(255, 68, 56, 0.06);
 }
 
-.totp-col-cell--copied {
-  border-color: rgba(16, 185, 129, 0.4);
+.totp-google-cell--warning:hover {
+  background: rgba(255, 68, 56, 0.08);
+}
+
+.totp-google-cell--copied {
+  border-color: rgba(16, 185, 129, 0.5);
   background: rgba(16, 185, 129, 0.08);
 }
 
-.totp-col-info {
-  display: flex;
-  flex-direction: column;
-  align-items: flex-end;
-  gap: 1px;
-}
-
-.totp-col-code {
-  font-family: "NDot57", ui-monospace, monospace;
-  font-size: 0.95rem;
-  font-weight: 700;
-  letter-spacing: 0.08em;
-  color: var(--text, #ffffff);
-  line-height: 1.1;
-}
-
-.totp-col-timer {
+.totp-google-code-wrap {
   display: flex;
   align-items: center;
-  gap: 4px;
+  gap: 6px;
+  position: relative;
 }
 
-.totp-col-ring {
-  transform: rotate(-90deg);
-}
-
-.totp-col-ring-bg {
-  fill: none;
-  stroke: rgba(255, 255, 255, 0.15);
-  stroke-width: 3.5;
-}
-
-.totp-col-ring-fg {
-  fill: none;
-  stroke: var(--accent, #ff4438);
-  stroke-width: 3.5;
-  stroke-linecap: round;
-  transition: stroke-dasharray 1s linear, stroke 0.3s;
-}
-
-.totp-col-cell--warning .totp-col-ring-fg {
-  stroke: #ff4438;
-}
-
-.totp-col-seconds {
-  font-size: 0.68rem;
-  color: #888888;
-  font-family: ui-monospace, monospace;
+.totp-google-code {
+  font-family: "NDot57", ui-monospace, monospace;
+  font-size: 1.25rem;
+  font-weight: 700;
+  letter-spacing: 0.08em;
+  color: #4285f4;
   line-height: 1;
+  transition: color 0.15s ease;
 }
 
-.totp-col-cell--warning .totp-col-seconds {
+.totp-google-cell--warning .totp-google-code {
   color: #ff4438;
-  font-weight: 700;
 }
 
-.totp-col-copy-btn {
-  background: rgba(255, 255, 255, 0.08);
-  color: var(--text, #ffffff);
-  border: 1px solid rgba(255, 255, 255, 0.15);
-  border-radius: 4px;
-  padding: 3px 6px;
-  font-size: 0.68rem;
-  font-weight: 700;
-  letter-spacing: 0.05em;
-  cursor: pointer;
-  transition: all 0.15s ease;
-  font-family: inherit;
+.totp-google-cell--copied .totp-google-code {
+  color: #10b981;
 }
 
-.totp-col-copy-btn:hover {
-  background: rgba(255, 255, 255, 0.18);
-  border-color: rgba(255, 255, 255, 0.3);
-}
-
-.totp-col-copy-btn.copied {
+.totp-google-copied-pill {
+  position: absolute;
+  top: -14px;
+  right: -4px;
   background: #10b981;
   color: #000000;
-  border-color: #10b981;
+  font-size: 0.6rem;
+  font-weight: 800;
+  letter-spacing: 0.05em;
+  padding: 1px 5px;
+  border-radius: 4px;
+  white-space: nowrap;
+}
+
+.totp-google-pie-wrap {
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  flex-shrink: 0;
+}
+
+.totp-google-pie-svg {
+  display: block;
+}
+
+.totp-google-pie-path {
+  transition: fill 0.3s ease;
 }
 
 @media (max-width: 480px) {
-  .totp-col-cell {
-    padding: 3px 6px;
+  .totp-google-cell {
     gap: 6px;
+    padding: 3px 6px;
   }
-  .totp-col-code {
-    font-size: 0.88rem;
+  .totp-google-code {
+    font-size: 1.05rem;
     letter-spacing: 0.05em;
   }
-  .totp-col-copy-btn {
-    padding: 2px 4px;
-    font-size: 0.62rem;
+  .totp-google-pie-svg {
+    width: 18px;
+    height: 18px;
   }
 }
 

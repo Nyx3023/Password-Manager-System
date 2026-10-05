@@ -7,6 +7,23 @@ interface TotpColumnCellProps {
   onCopied?: () => void;
 }
 
+/**
+ * Generate SVG path for a Google Authenticator-style filled circular pie timer.
+ * Starts from 12 o'clock and fills clockwise according to fraction remaining.
+ */
+function getGoogleAuthPiePath(remaining: number, period = 30, cx = 12, cy = 12, r = 10): string {
+  const fraction = Math.max(0, Math.min(1, remaining / period));
+  if (fraction <= 0.01) return "";
+  if (fraction >= 0.999) {
+    return `M ${cx} ${cy - r} A ${r} ${r} 0 1 1 ${cx - 0.001} ${cy - r} Z`;
+  }
+  const angle = fraction * 2 * Math.PI;
+  const x = cx + r * Math.sin(angle);
+  const y = cy - r * Math.cos(angle);
+  const largeArcFlag = fraction > 0.5 ? 1 : 0;
+  return `M ${cx} ${cy} L ${cx} ${cy - r} A ${r} ${r} 0 ${largeArcFlag} 1 ${x.toFixed(2)} ${y.toFixed(2)} Z`;
+}
+
 export function TotpColumnCell({ secret, onCopied }: TotpColumnCellProps) {
   const [code, setCode] = useState<string>("------");
   const [remaining, setRemaining] = useState<number>(30);
@@ -42,25 +59,25 @@ export function TotpColumnCell({ secret, onCopied }: TotpColumnCellProps) {
     await copy(code);
     setCopied(true);
     onCopied?.();
-    setTimeout(() => setCopied(false), 2000);
+    setTimeout(() => setCopied(false), 1500);
   };
 
   if (!secret || !secret.trim()) return null;
 
   const formatted = code.length === 6 ? `${code.slice(0, 3)} ${code.slice(3)}` : code;
-  const progressPercent = Math.max(0, Math.min(100, (remaining / 30) * 100));
   const isExpiringSoon = remaining <= 5;
+  const piePath = getGoogleAuthPiePath(remaining, 30, 12, 12, 10);
 
   return (
     <div
-      className={`totp-col-cell${isExpiringSoon ? " totp-col-cell--warning" : ""}${
-        copied ? " totp-col-cell--copied" : ""
+      className={`totp-google-cell${isExpiringSoon ? " totp-google-cell--warning" : ""}${
+        copied ? " totp-google-cell--copied" : ""
       }`}
       onClick={(e) => {
         e.stopPropagation();
         void handleCopy();
       }}
-      title="Click to copy 2FA code"
+      title="Tap code to copy"
       role="button"
       tabIndex={0}
       onKeyDown={(e) => {
@@ -71,35 +88,25 @@ export function TotpColumnCell({ secret, onCopied }: TotpColumnCellProps) {
         }
       }}
     >
-      <div className="totp-col-info">
-        <span className="totp-col-code">{formatted}</span>
-        <div className="totp-col-timer">
-          <svg className="totp-col-ring" width="14" height="14" viewBox="0 0 36 36">
-            <path
-              className="totp-col-ring-bg"
-              d="M18 2.0845 a 15.9155 15.9155 0 0 1 0 31.831 a 15.9155 15.9155 0 0 1 0 -31.831"
-            />
-            <path
-              className="totp-col-ring-fg"
-              strokeDasharray={`${progressPercent}, 100`}
-              d="M18 2.0845 a 15.9155 15.9155 0 0 1 0 31.831 a 15.9155 15.9155 0 0 1 0 -31.831"
-            />
-          </svg>
-          <span className="totp-col-seconds">{remaining}s</span>
-        </div>
+      <div className="totp-google-code-wrap">
+        <span className="totp-google-code">{formatted}</span>
+        {copied && <span className="totp-google-copied-pill">COPIED</span>}
       </div>
 
-      <button
-        type="button"
-        className={`totp-col-copy-btn${copied ? " copied" : ""}`}
-        onClick={(e) => {
-          e.stopPropagation();
-          void handleCopy();
-        }}
-        aria-label="Copy 2FA Code"
-      >
-        {copied ? "COPIED" : "COPY"}
-      </button>
+      <div className="totp-google-pie-wrap" title={`${remaining}s remaining`}>
+        <svg className="totp-google-pie-svg" width="22" height="22" viewBox="0 0 24 24">
+          {/* Subtle background circle track */}
+          <circle cx="12" cy="12" r="10" fill="rgba(66, 133, 244, 0.15)" />
+          {/* Google Authenticator depleting pie wedge */}
+          {piePath && (
+            <path
+              d={piePath}
+              fill={isExpiringSoon ? "#ff4438" : "#4285f4"}
+              className="totp-google-pie-path"
+            />
+          )}
+        </svg>
+      </div>
     </div>
   );
 }
