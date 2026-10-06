@@ -27,7 +27,7 @@ import { AuthenticatorView } from "@/components/AuthenticatorView";
 import { UpdateModal } from "@/components/UpdateModal";
 import { Modal } from "@/components/Modal";
 import { MpinConfirmFlow } from "@/components/MpinConfirmFlow";
-import { checkForAppUpdates, type UpdateCheckResult } from "@/shared/updateService";
+import { subscribeAppUpdates, type UpdateCheckResult } from "@/shared/updateService";
 import "./desktop.css";
 
 const AUTO_LOCK_MS = 5 * 60 * 1000;
@@ -58,23 +58,20 @@ export default function AppDesktop() {
   }, [vault.mpinEnabled, vault.unlocked]);
   const [updateModalOpen, setUpdateModalOpen] = useState(false);
 
-  // Background update check on startup and periodically
+  // Real-time automatic background update detection on desktop
   useEffect(() => {
-    let mounted = true;
-    const check = async () => {
-      try {
-        const res = await checkForAppUpdates();
-        if (mounted && res?.hasUpdate) {
-          setUpdateInfo(res);
-        }
-      } catch {}
-    };
-    void check();
-    const interval = setInterval(check, 30 * 60 * 1000);
-    return () => {
-      mounted = false;
-      clearInterval(interval);
-    };
+    return subscribeAppUpdates((res) => {
+      if (res?.hasUpdate) {
+        setUpdateInfo((prev) => {
+          if (!prev || prev.latestVersion !== res.latestVersion) {
+            setUpdateToastDismissed(false);
+          }
+          return res;
+        });
+      } else {
+        setUpdateInfo(null);
+      }
+    });
   }, []);
 
   useEffect(() => {

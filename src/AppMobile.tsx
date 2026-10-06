@@ -19,6 +19,7 @@ import {
 } from "@/shared/firebaseSync";
 import { isFirebaseConfigured, loadFirebaseConfig } from "@/shared/firebaseConfig";
 import { restoreArchivedVault } from "@/shared/accountVaults";
+import { startAutoUpdateWatcher, triggerUpdateCheck } from "@/shared/updateService";
 
 const AUTO_LOCK_MS = 5 * 60 * 1000;
 
@@ -27,9 +28,11 @@ export default function AppMobile() {
   const { copy } = useClipboard();
   const [toast, setToast] = useState<string | null>(null);
 
-  // Android hardware back button handler
+  // Android hardware back button & app lifecycle watcher
   useEffect(() => {
-    let unlisten: (() => void) | undefined;
+    let unlistenBack: (() => void) | undefined;
+    let unlistenState: (() => void) | undefined;
+
     void CapacitorApp.addListener("backButton", ({ canGoBack }) => {
       const handled = dispatchBackEvent();
       if (!handled) {
@@ -40,11 +43,21 @@ export default function AppMobile() {
         }
       }
     }).then((handle) => {
-      unlisten = () => handle.remove();
+      unlistenBack = () => handle.remove();
+    });
+
+    startAutoUpdateWatcher();
+    void CapacitorApp.addListener("appStateChange", ({ isActive }) => {
+      if (isActive) {
+        void triggerUpdateCheck();
+      }
+    }).then((handle) => {
+      unlistenState = () => handle.remove();
     });
 
     return () => {
-      unlisten?.();
+      unlistenBack?.();
+      unlistenState?.();
     };
   }, []);
 

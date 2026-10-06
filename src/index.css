@@ -1142,14 +1142,15 @@ button:disabled {
 .bottom-nav-tabs {
   display: flex;
   align-items: center;
-  flex: 1;
+  flex: 1 1 auto;
+  min-width: 0;
   height: 100%;
-  gap: 4px;
+  gap: 8px;
 }
 
-.bottom-nav button,
 .bottom-nav-tab {
-  flex: 1;
+  flex: 1 1 0;
+  min-width: 0;
   height: 100%;
   display: flex;
   flex-direction: column;
@@ -1158,46 +1159,71 @@ button:disabled {
   background: transparent;
   border: none;
   color: var(--muted);
-  font-size: 0.74rem;
-  letter-spacing: 0.14em;
+  font-size: 0.76rem;
+  letter-spacing: 0.12em;
   text-transform: uppercase;
   font-weight: 600;
   cursor: pointer;
   padding: 0 4px;
+  position: relative;
   transition: color 0.15s ease;
+  user-select: none;
+  -webkit-tap-highlight-color: transparent;
 }
 
-.bottom-nav button.active,
+.bottom-nav-tab:hover,
+.bottom-nav-tab:active {
+  color: var(--text);
+}
+
 .bottom-nav-tab.active {
   color: var(--text);
 }
 
-.bottom-nav button.active::after,
-.bottom-nav-tab.active::after {
+.bottom-nav-tab::after {
   content: "";
   display: block;
   width: 4px;
   height: 4px;
   border-radius: 50%;
-  background: var(--accent);
+  background: transparent;
   margin-top: 4px;
+  transition: background 0.15s ease;
+}
+
+.bottom-nav-tab.active::after {
+  background: var(--accent);
+}
+
+.bottom-nav-divider {
+  width: 1px;
+  height: 20px;
+  background: rgba(255, 255, 255, 0.1);
+  flex-shrink: 0;
+  margin: 0 2px;
 }
 
 .bottom-nav-settings-btn {
-  display: flex;
-  align-items: center;
-  justify-content: center;
+  flex: 0 0 44px;
   width: 44px;
   height: 44px;
+  max-width: 44px;
+  min-width: 44px;
   border-radius: 50%;
   background: transparent;
   border: none;
   color: var(--muted);
   cursor: pointer;
   flex-shrink: 0;
-  transition: color 0.15s ease, background 0.15s ease, transform 0.1s ease;
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
   position: relative;
-  margin-left: 4px;
+  transition: color 0.15s ease, background 0.15s ease, transform 0.1s ease;
+  margin-left: 2px;
+  padding: 0;
+  user-select: none;
+  -webkit-tap-highlight-color: transparent;
 }
 
 .bottom-nav-settings-btn:hover,
@@ -1211,13 +1237,20 @@ button:disabled {
   background: rgba(255, 68, 56, 0.12);
 }
 
-.bottom-nav-settings-btn.active::after {
+.bottom-nav-settings-btn::after {
   content: "";
   position: absolute;
-  bottom: 4px;
+  bottom: 3px;
+  left: 50%;
+  transform: translateX(-50%);
   width: 4px;
   height: 4px;
   border-radius: 50%;
+  background: transparent;
+  transition: background 0.15s ease;
+}
+
+.bottom-nav-settings-btn.active::after {
   background: var(--accent);
 }
 

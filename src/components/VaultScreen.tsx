@@ -32,7 +32,7 @@ import {
 } from "@/shared/firebaseSync";
 import { AuthenticatorView } from "./AuthenticatorView";
 import { UpdateModal } from "./UpdateModal";
-import { checkForAppUpdates, type UpdateCheckResult } from "@/shared/updateService";
+import { subscribeAppUpdates, type UpdateCheckResult } from "@/shared/updateService";
 
 type Tab = "vault" | "authenticator" | "settings";
 
@@ -111,23 +111,15 @@ export function VaultScreen(props: VaultScreenProps) {
   const [updateInfo, setUpdateInfo] = useState<UpdateCheckResult | null>(null);
   const [updateModalOpen, setUpdateModalOpen] = useState(false);
 
-  // Background update check on mobile
+  // Real-time automatic background update detection on mobile
   useEffect(() => {
-    let mounted = true;
-    const check = async () => {
-      try {
-        const res = await checkForAppUpdates();
-        if (mounted && res?.hasUpdate) {
-          setUpdateInfo(res);
-        }
-      } catch {}
-    };
-    void check();
-    const interval = setInterval(check, 30 * 60 * 1000);
-    return () => {
-      mounted = false;
-      clearInterval(interval);
-    };
+    return subscribeAppUpdates((res) => {
+      if (res?.hasUpdate) {
+        setUpdateInfo(res);
+      } else {
+        setUpdateInfo(null);
+      }
+    });
   }, []);
 
   useEffect(() => {
@@ -655,6 +647,7 @@ export function VaultScreen(props: VaultScreenProps) {
               Authenticator
             </button>
           </div>
+          <div className="bottom-nav-divider" aria-hidden />
           <button
             type="button"
             className={`bottom-nav-settings-btn ${tab === "settings" ? "active" : ""}`}
@@ -662,7 +655,7 @@ export function VaultScreen(props: VaultScreenProps) {
             aria-label="Settings"
             title="Settings"
           >
-            <svg width="21" height="21" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round" aria-hidden>
+            <svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round" aria-hidden>
               <circle cx="12" cy="12" r="3" />
               <path d="M19.4 15a1.65 1.65 0 0 0 .33 1.82l.06.06a2 2 0 0 1 0 2.83 2 2 0 0 1-2.83 0l-.06-.06a1.65 1.65 0 0 0-1.82-.33 1.65 1.65 0 0 0-1 1.51V21a2 2 0 0 1-2 2 2 2 0 0 1-2-2v-.09A1.65 1.65 0 0 0 9 19.4a1.65 1.65 0 0 0-1.82.33l-.06.06a2 2 0 0 1-2.83 0 2 2 0 0 1 0-2.83l.06-.06a1.65 1.65 0 0 0 .33-1.82 1.65 1.65 0 0 0-1.51-1H3a2 2 0 0 1-2-2 2 2 0 0 1 2-2h.09A1.65 1.65 0 0 0 4.6 9a1.65 1.65 0 0 0-.33-1.82l-.06-.06a2 2 0 0 1 0-2.83 2 2 0 0 1 2.83 0l.06.06a1.65 1.65 0 0 0 1.82.33H9a1.65 1.65 0 0 0 1-1.51V3a2 2 0 0 1 2-2 2 2 0 0 1 2 2v.09a1.65 1.65 0 0 0 1 1.51 1.65 1.65 0 0 0 1.82-.33l.06-.06a2 2 0 0 1 2.83 0 2 2 0 0 1 0 2.83l-.06.06a1.65 1.65 0 0 0-.33 1.82V9a1.65 1.65 0 0 0 1.51 1H21a2 2 0 0 1 2 2 2 2 0 0 1-2 2h-.09a1.65 1.65 0 0 0-1.51 1z" />
             </svg>

@@ -30,4 +30,10 @@ describe("updateService - isNewerVersion", () => {
     expect(isNewerVersion("1.0", "1.0.1")).toBe(true);
     expect(isNewerVersion("1.0.1", "1.0")).toBe(false);
   });
+
+  it("handles beta prerelease iterations correctly", () => {
+    expect(isNewerVersion("1.0.9-beta.6", "1.0.9-beta.7")).toBe(true);
+    expect(isNewerVersion("1.0.9-beta.7", "1.0.9-beta.6")).toBe(false);
+    expect(isNewerVersion("1.0.9-beta.6", "1.0.9")).toBe(true);
+  });
 });

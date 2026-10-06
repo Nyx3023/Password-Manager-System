@@ -180,6 +180,18 @@ export async function checkForAppUpdates(
           htmlUrl: `https://github.com/${GITHUB_REPO_OWNER}/${GITHUB_REPO_NAME}/releases`,
         };
       }
+      if (res.status === 403) {
+        // Rate limited by GitHub API
+        return currentUpdateInfo || {
+          hasUpdate: false,
+          currentVersion,
+          latestVersion: currentVersion,
+          releaseTitle: "",
+          releaseNotes: "",
+          publishedAt: "",
+          htmlUrl: `https://github.com/${GITHUB_REPO_OWNER}/${GITHUB_REPO_NAME}/releases`,
+        };
+      }
       throw new Error(`GitHub API error: ${res.statusText}`);
     }
 
@@ -251,4 +263,73 @@ export async function checkForAppUpdates(
       error: err.message || "Failed to check for updates.",
     };
   }
+}
+
+// Global state & listeners for automatic background update detection
+let currentUpdateInfo: UpdateCheckResult | null = null;
+const updateListeners = new Set<(info: UpdateCheckResult | null) => void>();
+let watcherStarted = false;
+let lastCheckTime = 0;
+const THROTTLE_MS = 45 * 1000; // at most once every 45s on wake/focus/online
+
+export function getLatestUpdateInfo(): UpdateCheckResult | null {
+  return currentUpdateInfo;
+}
+
+export function subscribeAppUpdates(
+  callback: (info: UpdateCheckResult | null) => void,
+): () => void {
+  updateListeners.add(callback);
+  if (currentUpdateInfo) {
+    callback(currentUpdateInfo);
+  }
+  if (!watcherStarted) {
+    startAutoUpdateWatcher();
+  }
+  return () => {
+    updateListeners.delete(callback);
+  };
+}
+
+export async function triggerUpdateCheck(
+  channelOverride?: UpdateChannel,
+): Promise<UpdateCheckResult> {
+  lastCheckTime = Date.now();
+  const res = await checkForAppUpdates(channelOverride);
+  currentUpdateInfo = res;
+  for (const cb of updateListeners) {
+    try {
+      cb(res);
+    } catch {}
+  }
+  return res;
+}
+
+export function startAutoUpdateWatcher(intervalMs = 2.5 * 60 * 1000): void {
+  if (typeof window === "undefined" || watcherStarted) return;
+  watcherStarted = true;
+
+  // 1. Initial check immediately
+  void triggerUpdateCheck();
+
+  // 2. Periodic background polling (every 2.5 minutes)
+  setInterval(() => {
+    void triggerUpdateCheck();
+  }, intervalMs);
+
+  // 3. Auto check whenever app comes to foreground or window gains focus
+  const onWake = () => {
+    if (typeof document !== "undefined" && document.visibilityState === "hidden") return;
+    if (Date.now() - lastCheckTime > THROTTLE_MS) {
+      void triggerUpdateCheck();
+    }
+  };
+
+  window.addEventListener("focus", onWake);
+  document.addEventListener("visibilitychange", onWake);
+  window.addEventListener("online", () => {
+    if (Date.now() - lastCheckTime > 15 * 1000) {
+      void triggerUpdateCheck();
+    }
+  });
 }
