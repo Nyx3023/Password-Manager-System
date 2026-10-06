@@ -45,6 +45,7 @@ type SettingsModal =
   | "totp"
   | "firebase"
   | "updates"
+  | "extension"
   | null;
 
 interface SettingsScreenProps {
@@ -97,11 +98,13 @@ function SettingsRow({
   hint,
   onClick,
   trailing,
+  showChevron = true,
 }: {
   label: string;
   hint?: string;
   onClick?: () => void;
   trailing?: ReactNode;
+  showChevron?: boolean;
 }) {
   if (onClick) {
     return (
@@ -110,9 +113,14 @@ function SettingsRow({
           <span className="settings-row-label">{label}</span>
           {hint && <span className="settings-row-hint">{hint}</span>}
         </span>
-        <span className="settings-row-chevron" aria-hidden>
-          ›
-        </span>
+        <div style={{ display: "flex", alignItems: "center", gap: "8px", flexShrink: 0 }}>
+          {trailing}
+          {showChevron && (
+            <span className="settings-row-chevron" aria-hidden>
+              ›
+            </span>
+          )}
+        </div>
       </button>
     );
   }
@@ -211,262 +219,259 @@ export function SettingsScreen(props: SettingsScreenProps) {
 
   return (
     <div className="settings">
-      {window.electronAPI && (
-        <div className="settings-span-full">
-          <DesktopExtensionPanel />
-        </div>
-      )}
-
       <div className="settings-grid">
-      <section className="settings-group">
-        <SettingsRow
-          label="People"
-          hint={`${props.people.length} saved`}
-          onClick={() => setModal("people")}
-        />
-        <SettingsRow
-          label="Master password"
-          hint="Change encryption password"
-          onClick={() => setModal("password")}
-        />
-        <SettingsRow
-          label="MPIN"
-          hint={props.mpinEnabled ? "Required to unlock" : "Not set - add one"}
-          onClick={() => setModal("mpin")}
-        />
-        <SettingsRow
-          label="Backup & restore"
-          hint="Export or import .pms file"
-          onClick={() => setModal("backup")}
-        />
-        <SettingsRow
-          label="Emergency recovery kit"
-          hint="Print or download official recovery sheet"
-          onClick={() => setModal("emergency")}
-        />
-        {props.vaultTarget && (
-          <SettingsRow
-            label="Google Cloud Sync"
-            hint={
-              cloudConfig?.ownerEmail
-                ? `Bound to ${cloudConfig.ownerEmail}`
-                : cloudConfig?.enabled && cloudConfig?.userEmail
-                  ? `Connected (${cloudConfig.userEmail})`
-                  : "Zero-knowledge cloud sync & real-time push"
-            }
-            onClick={() => setModal("firebase")}
-          />
-        )}
-        <SettingsRow
-          label="Chrome passwords"
-          hint="Import from CSV export"
-          onClick={() => setModal("csv")}
-        />
-        <SettingsRow
-          label="Trash & Recycle bin"
-          hint={props.trashEntries?.length ? `${props.trashEntries.length} deleted items` : "Empty"}
-          onClick={() => setModal("trash")}
-        />
-        <SettingsRow
-          label="Import 2FA accounts"
-          hint="Google Authenticator, Aegis, 2FAS, URI"
-          onClick={() => setModal("totp")}
-        />
-        {window.electronAPI?.setAutoStart && (
-          <SettingsRow
-            label="Launch on system startup"
-            hint={autoStart ? "Enabled (starts in tray)" : "Disabled"}
-            onClick={async () => {
-              const next = !autoStart;
-              setAutoStart(next);
-              try {
-                const res = await window.electronAPI!.setAutoStart(next);
-                setAutoStart(res);
-              } catch {
-                setAutoStart(!next);
-              }
-            }}
-            trailing={
-              <button
-                type="button"
-                className={`toggle${autoStart ? " on" : ""}`}
-                aria-pressed={autoStart}
-                onClick={async (e) => {
-                  e.stopPropagation();
-                  const next = !autoStart;
-                  setAutoStart(next);
-                  try {
-                    const res = await window.electronAPI!.setAutoStart(next);
-                    setAutoStart(res);
-                  } catch {
-                    setAutoStart(!next);
+        {/* Left Column: Security & Vault Data */}
+        <div className="settings-col">
+          {/* Section: Security & Credentials */}
+          <div className="settings-section">
+            <h3 className="settings-section-title">Security & Credentials</h3>
+            <section className="settings-group">
+              <SettingsRow
+                label="Master password"
+                hint="Change encryption password"
+                onClick={() => setModal("password")}
+              />
+              <SettingsRow
+                label="MPIN"
+                hint={props.mpinEnabled ? "Required to unlock" : "Not set - add one"}
+                onClick={() => setModal("mpin")}
+              />
+              {!window.electronAPI && props.biometricsAvailable && (
+                <SettingsRow
+                  label="Biometric unlock"
+                  hint={props.biometricsEnabled ? "Enabled" : "Disabled"}
+                  showChevron={false}
+                  onClick={() =>
+                    props.biometricsEnabled
+                      ? void props.onDisableBiometrics()
+                      : void props.onEnableBiometrics()
                   }
-                }}
+                  trailing={
+                    <span
+                      className={`toggle${props.biometricsEnabled ? " on" : ""}`}
+                      aria-pressed={props.biometricsEnabled}
+                    />
+                  }
+                />
+              )}
+              <SettingsRow
+                label="Emergency recovery kit"
+                hint="Print or download official recovery sheet"
+                onClick={() => setModal("emergency")}
               />
-            }
-          />
-        )}
-      </section>
-
-      {autofillSupported() && (
-        <section className="settings-group">
-          <SettingsRow
-            label="Android autofill"
-            hint={
-              autofillEnabled
-                ? "Set up Chrome if Google still appears"
-                : "Required — then configure Chrome"
-            }
-            onClick={() => setModal("autofill")}
-          />
-        </section>
-      )}
-
-      <section className="settings-group">
-        <SettingsRow
-          label="App updates"
-          hint={`Version ${CURRENT_APP_VERSION} • ${updateChannel.toUpperCase()} Channel • Check Updates`}
-          onClick={() => setModal("updates")}
-        />
-      </section>
-
-      {channelUnlocked && (
-        <section className="settings-group settings-group--channel">
-          <div className="channel-selector-card">
-            <div className="channel-selector-header">
-              <span className="channel-badge">DEV CHANNEL UNLOCKED</span>
-              <span className="channel-title">UPDATE STREAM</span>
-            </div>
-            <p className="channel-subtitle">
-              Choose which release stream to receive updates from. You can switch back and forth anytime.
-            </p>
-            <div className="channel-toggle-row">
-              <button
-                type="button"
-                className={`channel-btn ${updateChannel === "release" ? "active" : ""}`}
-                onClick={() => {
-                  setUpdateChannel("release");
-                  setUpdateChannelState("release");
-                  props.onMessage("Channel set to RELEASE (Stable)");
-                }}
-              >
-                <div className="channel-btn-top">
-                  <span className="channel-dot" />
-                  <span className="channel-name">RELEASE</span>
-                  {updateChannel === "release" && <span className="channel-active-tag">ACTIVE</span>}
-                </div>
-                <span className="channel-desc">Stable releases for everyday security</span>
-              </button>
-              <button
-                type="button"
-                className={`channel-btn ${updateChannel === "beta" ? "active" : ""}`}
-                onClick={() => {
-                  setUpdateChannel("beta");
-                  setUpdateChannelState("beta");
-                  props.onMessage("Channel set to BETA (Preview)");
-                }}
-              >
-                <div className="channel-btn-top">
-                  <span className="channel-dot" />
-                  <span className="channel-name">BETA</span>
-                  {updateChannel === "beta" && <span className="channel-active-tag">ACTIVE</span>}
-                </div>
-                <span className="channel-desc">Preview builds with experimental features</span>
-              </button>
-            </div>
+            </section>
           </div>
-        </section>
-      )}
 
-      {!window.electronAPI && props.biometricsAvailable && (
-        <section className="settings-group">
-          <SettingsRow
-            label="Biometric unlock"
-            hint={
-              props.biometricsEnabled
-                ? "Enabled"
-                : "Disabled"
-            }
-            trailing={
-              <button
-                type="button"
-                className={`toggle${props.biometricsEnabled ? " on" : ""}`}
-                disabled={props.busy}
-                aria-pressed={props.biometricsEnabled}
-                onClick={() =>
-                  props.biometricsEnabled
-                    ? void props.onDisableBiometrics()
-                    : void props.onEnableBiometrics()
+          {/* Section: Vault & Data */}
+          <div className="settings-section">
+            <h3 className="settings-section-title">Vault & Data</h3>
+            <section className="settings-group">
+              {props.vaultTarget && (
+                <SettingsRow
+                  label="Google Cloud Sync"
+                  hint={
+                    cloudConfig?.ownerEmail
+                      ? `Bound to ${cloudConfig.ownerEmail}`
+                      : cloudConfig?.enabled && cloudConfig?.userEmail
+                        ? `Connected (${cloudConfig.userEmail})`
+                        : "Zero-knowledge cloud sync & real-time push"
+                  }
+                  onClick={() => setModal("firebase")}
+                />
+              )}
+              <SettingsRow
+                label="Backup & restore"
+                hint="Export or import .pms file"
+                onClick={() => setModal("backup")}
+              />
+              {props.onImportTotp && (
+                <SettingsRow
+                  label="Import 2FA accounts"
+                  hint="Google Authenticator, Aegis, 2FAS, URI"
+                  onClick={() => setModal("totp")}
+                />
+              )}
+              <SettingsRow
+                label="Chrome passwords"
+                hint="Import from CSV export"
+                onClick={() => setModal("csv")}
+              />
+              <SettingsRow
+                label="Trash & Recycle bin"
+                hint={props.trashEntries?.length ? `${props.trashEntries.length} deleted items` : "Empty"}
+                onClick={() => setModal("trash")}
+              />
+            </section>
+          </div>
+        </div>
+
+        {/* Right Column: Preferences, Updates & Danger Zone */}
+        <div className="settings-col">
+          {/* Section: System & Preferences */}
+          <div className="settings-section">
+            <h3 className="settings-section-title">System & Preferences</h3>
+            <section className="settings-group">
+              <SettingsRow
+                label="People"
+                hint={`${props.people.length} saved`}
+                onClick={() => setModal("people")}
+              />
+
+              {window.electronAPI && (
+                <SettingsRow
+                  label="Browser extension"
+                  hint="Autofill for Chrome, Edge, Brave, & Firefox"
+                  onClick={() => setModal("extension")}
+                />
+              )}
+
+              {autofillSupported() && (
+                <SettingsRow
+                  label="Android autofill"
+                  hint={
+                    autofillEnabled
+                      ? "Set up Chrome if Google still appears"
+                      : "Required — then configure Chrome"
+                  }
+                  onClick={() => setModal("autofill")}
+                />
+              )}
+
+              {window.electronAPI?.setAutoStart && (
+                <SettingsRow
+                  label="Launch on system startup"
+                  hint={autoStart ? "Enabled (starts in tray)" : "Disabled"}
+                  showChevron={false}
+                  onClick={async () => {
+                    const next = !autoStart;
+                    setAutoStart(next);
+                    try {
+                      const res = await window.electronAPI!.setAutoStart(next);
+                      setAutoStart(res);
+                    } catch {
+                      setAutoStart(!next);
+                    }
+                  }}
+                  trailing={
+                    <span
+                      className={`toggle${autoStart ? " on" : ""}`}
+                      aria-pressed={autoStart}
+                    />
+                  }
+                />
+              )}
+
+              <SettingsRow
+                label="App updates"
+                hint={`Version ${CURRENT_APP_VERSION} • ${updateChannel.toUpperCase()} channel`}
+                onClick={() => setModal("updates")}
+                trailing={
+                  <span className="update-channel-badge">
+                    {updateChannel.toUpperCase()}
+                  </span>
                 }
               />
-            }
-          />
-        </section>
-      )}
 
-      {props.onSwitchAccount && (
-        <section className="settings-group">
-          <SettingsRow
-            label="Switch Account / Vault"
-            hint={
-              cloudConfig?.ownerEmail
-                ? `Active account: ${cloudConfig.ownerEmail}`
-                : "Switch to a different account or offline vault"
-            }
-            onClick={() => {
-              void props.onSwitchAccount?.();
-            }}
-          />
-        </section>
-      )}
+              {channelUnlocked && (
+                <div className="channel-selector-inline">
+                  <div className="channel-selector-inline-info">
+                    <span className="channel-badge-mini">DEV</span>
+                    <span className="channel-inline-label">Update stream:</span>
+                  </div>
+                  <div className="channel-inline-pills">
+                    <button
+                      type="button"
+                      className={`channel-pill-btn ${updateChannel === "release" ? "active" : ""}`}
+                      onClick={() => {
+                        setUpdateChannel("release");
+                        setUpdateChannelState("release");
+                        props.onMessage("Channel set to RELEASE (Stable)");
+                      }}
+                    >
+                      RELEASE
+                    </button>
+                    <button
+                      type="button"
+                      className={`channel-pill-btn ${updateChannel === "beta" ? "active" : ""}`}
+                      onClick={() => {
+                        setUpdateChannel("beta");
+                        setUpdateChannelState("beta");
+                        props.onMessage("Channel set to BETA (Preview)");
+                      }}
+                    >
+                      BETA
+                    </button>
+                  </div>
+                </div>
+              )}
 
-      {(props.onDeleteAccount || props.onResetApp) && (
-        <section className="settings-group settings-group--danger">
-          <div style={{ padding: "12px 14px 6px" }}>
-            <span style={{ color: "#ef4444", fontSize: "0.78rem", fontWeight: 700, textTransform: "uppercase", letterSpacing: "0.12em", display: "block", marginBottom: "4px" }}>
-              Danger Zone
-            </span>
-            <p className="muted small" style={{ margin: "0 0 12px", lineHeight: 1.45, fontSize: "0.82rem" }}>
-              Permanently delete this account, erase all cloud data from Firestore, and wipe all local passwords on this device.
-            </p>
-            <HoldToConfirmButton
-              label="Hold to Delete Account & Passwords"
-              activeLabel="Keep holding to delete…"
-              durationMs={3000}
-              onQuickTap={() => {
-                const now = Date.now();
-                deleteTapTimesRef.current = [
-                  ...deleteTapTimesRef.current.filter((t) => now - t < 2500),
-                  now,
-                ];
-                if (deleteTapTimesRef.current.length >= 5) {
-                  deleteTapTimesRef.current = [];
-                  const nextState = !channelUnlocked;
-                  setChannelUnlockedState(nextState);
-                  setChannelUnlocked(nextState);
-                  try {
-                    if (navigator.vibrate) navigator.vibrate([40, 50, 40, 50, 90]);
-                  } catch {}
-                  props.onMessage(
-                    nextState
-                      ? "EASTER EGG UNLOCKED: UPDATE CHANNEL OPTIONS REVEALED"
-                      : "UPDATE CHANNEL OPTIONS HIDDEN",
-                  );
-                }
-              }}
-              onConfirm={async () => {
-                if (props.onDeleteAccount) {
-                  const done = await props.onDeleteAccount();
-                  if (done) props.onMessage("Account and all passwords deleted.");
-                } else if (props.onResetApp) {
-                  const done = await props.onResetApp();
-                  if (done) props.onMessage("App reset. First-time setup will start.");
-                }
-              }}
-            />
+              {props.onSwitchAccount && (
+                <SettingsRow
+                  label="Switch Account / Vault"
+                  hint={
+                    cloudConfig?.ownerEmail
+                      ? `Active: ${cloudConfig.ownerEmail}`
+                      : "Switch account or offline vault"
+                  }
+                  onClick={() => {
+                    void props.onSwitchAccount?.();
+                  }}
+                />
+              )}
+            </section>
           </div>
-        </section>
-      )}
+
+          {/* Section: Danger Zone */}
+          {(props.onDeleteAccount || props.onResetApp) && (
+            <div className="settings-section">
+              <h3 className="settings-section-title" style={{ color: "rgba(239, 68, 68, 0.85)" }}>
+                Danger Zone
+              </h3>
+              <section className="settings-group settings-group--danger">
+                <div style={{ padding: "14px 16px 14px" }}>
+                  <p className="muted small" style={{ margin: "0 0 12px", lineHeight: 1.45, fontSize: "0.82rem" }}>
+                    Permanently delete this account, erase all cloud data from Firestore, and wipe all local passwords on this device.
+                  </p>
+                  <HoldToConfirmButton
+                    label="Hold to Delete Account & Passwords"
+                    activeLabel="Keep holding to delete…"
+                    durationMs={3000}
+                    onQuickTap={() => {
+                      const now = Date.now();
+                      deleteTapTimesRef.current = [
+                        ...deleteTapTimesRef.current.filter((t) => now - t < 2500),
+                        now,
+                      ];
+                      if (deleteTapTimesRef.current.length >= 5) {
+                        deleteTapTimesRef.current = [];
+                        const nextState = !channelUnlocked;
+                        setChannelUnlockedState(nextState);
+                        setChannelUnlocked(nextState);
+                        try {
+                          if (navigator.vibrate) navigator.vibrate([40, 50, 40, 50, 90]);
+                        } catch {}
+                        props.onMessage(
+                          nextState
+                            ? "DEV CHANNEL UNLOCKED: UPDATE OPTIONS REVEALED"
+                            : "DEV CHANNEL OPTIONS HIDDEN",
+                        );
+                      }
+                    }}
+                    onConfirm={async () => {
+                      if (props.onDeleteAccount) {
+                        const done = await props.onDeleteAccount();
+                        if (done) props.onMessage("Account and all passwords deleted.");
+                      } else if (props.onResetApp) {
+                        const done = await props.onResetApp();
+                        if (done) props.onMessage("App reset. First-time setup will start.");
+                      }
+                    }}
+                  />
+                </div>
+              </section>
+            </div>
+          )}
+        </div>
       </div>
 
       {props.error && <p className="error">{props.error}</p>}
@@ -677,6 +682,17 @@ export function SettingsScreen(props: SettingsScreenProps) {
         mpinEnabled={props.mpinEnabled}
         profileCount={props.people.length}
       />
+
+      {window.electronAPI && (
+        <Modal
+          title="Browser Extension"
+          open={modal === "extension"}
+          onClose={closeModal}
+          wide
+        >
+          <DesktopExtensionPanel />
+        </Modal>
+      )}
 
     </div>
   );

@@ -2054,10 +2054,111 @@ button:disabled {
   align-content: start;
 }
 
-@media (min-width: 640px) {
+@media (min-width: 768px) {
   .settings-grid {
     grid-template-columns: repeat(2, minmax(0, 1fr));
+    gap: 20px;
   }
+}
+
+.settings-col {
+  display: flex;
+  flex-direction: column;
+  gap: 16px;
+}
+
+.settings-section {
+  display: flex;
+  flex-direction: column;
+  gap: 6px;
+}
+
+.settings-section-title {
+  margin: 0;
+  padding: 0 4px;
+  font-family: var(--font-mono, monospace);
+  font-size: 0.72rem;
+  font-weight: 700;
+  letter-spacing: 0.12em;
+  text-transform: uppercase;
+  color: var(--muted, #888);
+}
+
+.update-channel-badge {
+  font-family: var(--font-mono, monospace);
+  font-size: 0.65rem;
+  font-weight: 700;
+  letter-spacing: 0.08em;
+  padding: 2px 7px;
+  border-radius: 4px;
+  background: rgba(255, 68, 56, 0.12);
+  color: #ff4438;
+  border: 1px solid rgba(255, 68, 56, 0.3);
+  text-transform: uppercase;
+}
+
+.channel-selector-inline {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 12px;
+  padding: 8px 16px;
+  background: rgba(255, 68, 56, 0.05);
+  border-top: 1px solid rgba(255, 68, 56, 0.15);
+}
+
+.channel-selector-inline-info {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+}
+
+.channel-badge-mini {
+  font-family: var(--font-mono, monospace);
+  font-size: 0.62rem;
+  font-weight: 700;
+  letter-spacing: 0.1em;
+  color: #ff4438;
+  background: rgba(255, 68, 56, 0.15);
+  padding: 1px 5px;
+  border-radius: 3px;
+  border: 1px solid rgba(255, 68, 56, 0.3);
+}
+
+.channel-inline-label {
+  font-size: 0.75rem;
+  color: var(--muted, #aaa);
+}
+
+.channel-inline-pills {
+  display: flex;
+  gap: 6px;
+}
+
+.channel-pill-btn {
+  font-family: var(--font-mono, monospace);
+  font-size: 0.7rem;
+  font-weight: 700;
+  letter-spacing: 0.06em;
+  padding: 3px 8px;
+  border-radius: 4px;
+  background: #181818;
+  border: 1px solid #333;
+  color: #888;
+  cursor: pointer;
+  transition: all 0.15s ease;
+}
+
+.channel-pill-btn:hover {
+  color: #fff;
+  border-color: #555;
+}
+
+.channel-pill-btn.active {
+  background: rgba(255, 68, 56, 0.15);
+  border-color: #ff4438;
+  color: #fff;
+  box-shadow: 0 0 6px rgba(255, 68, 56, 0.2);
 }
 
 .settings-span-full {

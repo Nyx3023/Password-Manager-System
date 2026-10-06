@@ -701,6 +701,12 @@
   gap: 1rem;
 }
 
+.modal .ext-panel {
+  background: transparent;
+  border: none;
+  padding: 0;
+}
+
 .ext-panel-header {
   display: flex;
   align-items: center;
