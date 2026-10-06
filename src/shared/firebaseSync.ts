@@ -451,6 +451,11 @@ export async function restoreViaGoogleAccount(user: {
   await saveVaultFile(remoteVaultRaw);
   await writeDataFile(`vault_${user.uid}.enc.json`, remoteVaultRaw);
   await deleteMpinWrap();
+  try {
+    if (typeof sessionStorage !== "undefined") {
+      sessionStorage.setItem("securex_recovered_needs_mpin", "true");
+    }
+  } catch {}
 
   try {
     const prefs = await loadPrefs();

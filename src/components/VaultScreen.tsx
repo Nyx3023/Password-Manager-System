@@ -21,6 +21,7 @@ import { SettingsScreen } from "./SettingsScreen";
 import { AddEntryWizard } from "./wizard/AddEntryWizard";
 import { TotpAddModal } from "./TotpAddModal";
 import { TotpImporterModal } from "./TotpImporterModal";
+import { MpinConfirmFlow } from "./MpinConfirmFlow";
 import { useBackHandler } from "@/shared/backButton";
 import {
   loadFirebaseSyncState,
@@ -137,6 +138,17 @@ export function VaultScreen(props: VaultScreenProps) {
       setAvatarFailed(false);
     });
   }, []);
+
+  const [recoveredMpinPrompt, setRecoveredMpinPrompt] = useState(false);
+
+  useEffect(() => {
+    try {
+      const needed = sessionStorage.getItem("securex_recovered_needs_mpin") === "true";
+      if (needed && !props.mpinEnabled) {
+        setRecoveredMpinPrompt(true);
+      }
+    } catch {}
+  }, [props.mpinEnabled]);
 
   useBackHandler(() => {
     if (firebaseModalOpen) {
@@ -583,28 +595,77 @@ export function VaultScreen(props: VaultScreenProps) {
         onMessage={props.onMessage}
       />
 
+      <Modal
+        title="Set Quick Unlock MPIN"
+        open={recoveredMpinPrompt}
+        onClose={() => {
+          try {
+            sessionStorage.removeItem("securex_recovered_needs_mpin");
+          } catch {}
+          setRecoveredMpinPrompt(false);
+        }}
+      >
+        <div className="stack">
+          <p className="muted small">
+            Your vault was recovered from your Google account. Set an 8-digit MPIN so you can quickly unlock SecureX instead of entering your Master Password every time.
+          </p>
+          <MpinConfirmFlow
+            onComplete={async (code) => {
+              const ok = await props.onSetMpin(code, code);
+              if (ok) {
+                try {
+                  sessionStorage.removeItem("securex_recovered_needs_mpin");
+                } catch {}
+                setRecoveredMpinPrompt(false);
+                props.onMessage("MPIN set successfully. You can now unlock using your MPIN.");
+              }
+            }}
+          />
+          <button
+            type="button"
+            className="ghost block"
+            style={{ marginTop: "8px" }}
+            onClick={() => {
+              try {
+                sessionStorage.removeItem("securex_recovered_needs_mpin");
+              } catch {}
+              setRecoveredMpinPrompt(false);
+            }}
+          >
+            Skip for now
+          </button>
+        </div>
+      </Modal>
+
       <nav className="bottom-nav" aria-label="Main">
         <div className="bottom-nav-inner">
+          <div className="bottom-nav-tabs">
+            <button
+              type="button"
+              className={`bottom-nav-tab ${tab === "vault" ? "active" : ""}`}
+              onClick={() => setTab("vault")}
+            >
+              Vault
+            </button>
+            <button
+              type="button"
+              className={`bottom-nav-tab ${tab === "authenticator" ? "active" : ""}`}
+              onClick={() => setTab("authenticator")}
+            >
+              Authenticator
+            </button>
+          </div>
           <button
             type="button"
-            className={tab === "vault" ? "active" : ""}
-            onClick={() => setTab("vault")}
-          >
-            Vault
-          </button>
-          <button
-            type="button"
-            className={tab === "authenticator" ? "active" : ""}
-            onClick={() => setTab("authenticator")}
-          >
-            Authenticator
-          </button>
-          <button
-            type="button"
-            className={tab === "settings" ? "active" : ""}
+            className={`bottom-nav-settings-btn ${tab === "settings" ? "active" : ""}`}
             onClick={() => setTab("settings")}
+            aria-label="Settings"
+            title="Settings"
           >
-            Settings
+            <svg width="21" height="21" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round" aria-hidden>
+              <circle cx="12" cy="12" r="3" />
+              <path d="M19.4 15a1.65 1.65 0 0 0 .33 1.82l.06.06a2 2 0 0 1 0 2.83 2 2 0 0 1-2.83 0l-.06-.06a1.65 1.65 0 0 0-1.82-.33 1.65 1.65 0 0 0-1 1.51V21a2 2 0 0 1-2 2 2 2 0 0 1-2-2v-.09A1.65 1.65 0 0 0 9 19.4a1.65 1.65 0 0 0-1.82.33l-.06.06a2 2 0 0 1-2.83 0 2 2 0 0 1 0-2.83l.06-.06a1.65 1.65 0 0 0 .33-1.82 1.65 1.65 0 0 0-1.51-1H3a2 2 0 0 1-2-2 2 2 0 0 1 2-2h.09A1.65 1.65 0 0 0 4.6 9a1.65 1.65 0 0 0-.33-1.82l-.06-.06a2 2 0 0 1 0-2.83 2 2 0 0 1 2.83 0l.06.06a1.65 1.65 0 0 0 1.82.33H9a1.65 1.65 0 0 0 1-1.51V3a2 2 0 0 1 2-2 2 2 0 0 1 2 2v.09a1.65 1.65 0 0 0 1 1.51 1.65 1.65 0 0 0 1.82-.33l.06-.06a2 2 0 0 1 2.83 0 2 2 0 0 1 0 2.83l-.06.06a1.65 1.65 0 0 0-.33 1.82V9a1.65 1.65 0 0 0 1.51 1H21a2 2 0 0 1 2 2 2 2 0 0 1-2 2h-.09a1.65 1.65 0 0 0-1.51 1z" />
+            </svg>
           </button>
         </div>
       </nav>

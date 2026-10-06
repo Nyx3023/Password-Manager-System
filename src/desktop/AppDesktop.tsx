@@ -25,6 +25,8 @@ import { DesktopVaultView } from "./DesktopVaultView";
 import { DesktopQuickAccess } from "./DesktopQuickAccess";
 import { AuthenticatorView } from "@/components/AuthenticatorView";
 import { UpdateModal } from "@/components/UpdateModal";
+import { Modal } from "@/components/Modal";
+import { MpinConfirmFlow } from "@/components/MpinConfirmFlow";
 import { checkForAppUpdates, type UpdateCheckResult } from "@/shared/updateService";
 import "./desktop.css";
 
@@ -44,6 +46,16 @@ export default function AppDesktop() {
   const [avatarFailed, setAvatarFailed] = useState(false);
   const [updateInfo, setUpdateInfo] = useState<UpdateCheckResult | null>(null);
   const [updateToastDismissed, setUpdateToastDismissed] = useState(false);
+  const [recoveredMpinPrompt, setRecoveredMpinPrompt] = useState(false);
+
+  useEffect(() => {
+    try {
+      const needed = sessionStorage.getItem("securex_recovered_needs_mpin") === "true";
+      if (needed && !vault.mpinEnabled && vault.unlocked) {
+        setRecoveredMpinPrompt(true);
+      }
+    } catch {}
+  }, [vault.mpinEnabled, vault.unlocked]);
   const [updateModalOpen, setUpdateModalOpen] = useState(false);
 
   // Background update check on startup and periodically
@@ -651,6 +663,49 @@ export default function AppDesktop() {
         onClose={() => setUpdateModalOpen(false)}
         onMessage={showToast}
       />
+
+      <Modal
+        title="Set Quick Unlock MPIN"
+        open={recoveredMpinPrompt}
+        onClose={() => {
+          try {
+            sessionStorage.removeItem("securex_recovered_needs_mpin");
+          } catch {}
+          setRecoveredMpinPrompt(false);
+        }}
+      >
+        <div className="stack">
+          <p className="muted small">
+            Your vault was recovered from your Google account. Set an 8-digit MPIN so you can quickly unlock SecureX instead of entering your Master Password every time.
+          </p>
+          <MpinConfirmFlow
+            size="desktop"
+            onComplete={async (code) => {
+              const ok = await vault.setMpin(code, code);
+              if (ok) {
+                try {
+                  sessionStorage.removeItem("securex_recovered_needs_mpin");
+                } catch {}
+                setRecoveredMpinPrompt(false);
+                showToast("MPIN set successfully. You can now unlock using your MPIN.");
+              }
+            }}
+          />
+          <button
+            type="button"
+            className="ghost block"
+            style={{ marginTop: "8px" }}
+            onClick={() => {
+              try {
+                sessionStorage.removeItem("securex_recovered_needs_mpin");
+              } catch {}
+              setRecoveredMpinPrompt(false);
+            }}
+          >
+            Skip for now
+          </button>
+        </div>
+      </Modal>
     </div>
   );
 }
