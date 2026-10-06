@@ -306,6 +306,28 @@ export function useVault() {
     }
   }, [service, refreshMeta]);
 
+  const loadRestoredVault = useCallback(async () => {
+    setError(null);
+    setBusy(true);
+    try {
+      stopRemoteVaultSubscription();
+      service.lock();
+      await clearAutofillSession();
+      await disableBiometricUnlock();
+      setUnlocked(false);
+      setEntries([]);
+      setTrashEntries([]);
+      setPeople([]);
+      await refreshMeta();
+      return true;
+    } catch (e) {
+      setError(e instanceof Error ? e.message : "Failed to load restored vault.");
+      return false;
+    } finally {
+      setBusy(false);
+    }
+  }, [service, refreshMeta]);
+
   const deleteAccountAndVault = useCallback(async () => {
     setError(null);
     setBusy(true);
@@ -765,6 +787,7 @@ export function useVault() {
     refreshMeta,
     resetApp,
     switchAccount,
+    loadRestoredVault,
     deleteAccountAndVault,
     verifyBackupPassword,
   };

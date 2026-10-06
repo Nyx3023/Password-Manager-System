@@ -276,15 +276,31 @@ export function SettingsScreen(props: SettingsScreenProps) {
           <SettingsRow
             label="Launch on system startup"
             hint={autoStart ? "Enabled (starts in tray)" : "Disabled"}
+            onClick={async () => {
+              const next = !autoStart;
+              setAutoStart(next);
+              try {
+                const res = await window.electronAPI!.setAutoStart(next);
+                setAutoStart(res);
+              } catch {
+                setAutoStart(!next);
+              }
+            }}
             trailing={
               <button
                 type="button"
                 className={`toggle${autoStart ? " on" : ""}`}
                 aria-pressed={autoStart}
-                onClick={async () => {
+                onClick={async (e) => {
+                  e.stopPropagation();
                   const next = !autoStart;
-                  const res = await window.electronAPI!.setAutoStart(next);
-                  setAutoStart(res);
+                  setAutoStart(next);
+                  try {
+                    const res = await window.electronAPI!.setAutoStart(next);
+                    setAutoStart(res);
+                  } catch {
+                    setAutoStart(!next);
+                  }
                 }}
               />
             }

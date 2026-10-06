@@ -436,15 +436,40 @@ function registerIpc() {
 
   // Windows auto-start on boot
   ipcMain.handle("system:get-auto-start", () => {
-    return app.getLoginItemSettings().openAtLogin;
+    try {
+      const withArgs = app.getLoginItemSettings({ args: ["--hidden"] }).openAtLogin;
+      const withoutArgs = app.getLoginItemSettings().openAtLogin;
+      if (withArgs || withoutArgs) return true;
+      if (process.platform === "win32") {
+        const { execSync } = require("node:child_process");
+        const out = execSync('reg query "HKCU\\Software\\Microsoft\\Windows\\CurrentVersion\\Run"', { encoding: "utf8" });
+        if (out.includes("SecureX")) return true;
+      }
+    } catch {
+      // Fallback
+    }
+    return false;
   });
 
   ipcMain.handle("system:set-auto-start", (_e, enable) => {
-    app.setLoginItemSettings({
-      openAtLogin: !!enable,
-      args: ["--hidden"],
-    });
-    return app.getLoginItemSettings().openAtLogin;
+    try {
+      app.setLoginItemSettings({
+        openAtLogin: !!enable,
+        args: ["--hidden"],
+      });
+      if (process.platform === "win32" && !enable) {
+        const { execSync } = require("node:child_process");
+        try {
+          execSync('reg delete "HKCU\\Software\\Microsoft\\Windows\\CurrentVersion\\Run" /v "electron.app.SecureX" /f', { stdio: "ignore" });
+        } catch {}
+        try {
+          execSync('reg delete "HKCU\\Software\\Microsoft\\Windows\\CurrentVersion\\Run" /v "SecureX" /f', { stdio: "ignore" });
+        } catch {}
+      }
+    } catch (err) {
+      console.warn("[System] Failed to set auto-start:", err);
+    }
+    return !!enable;
   });
 
   // --- Auto-Updater IPC ---

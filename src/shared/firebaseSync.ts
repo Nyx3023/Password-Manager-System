@@ -353,17 +353,32 @@ export async function signOutFirebase(targetUid?: string): Promise<void> {
 
 /**
  * Download remote encrypted vault from Firestore without local merging.
- * Used during SetupWizard / initial onboarding restore.
+ * Used during SetupWizard / initial onboarding restore / mismatch recovery.
  */
-export async function fetchRemoteVaultFromFirebase(): Promise<string | null> {
-  const auth = await getFirebaseAuth();
-  const user = auth.currentUser;
+export async function fetchRemoteVaultFromFirebase(targetUid?: string): Promise<string | null> {
+  const auth = await getFirebaseAuth(targetUid);
+  let user = auth.currentUser;
+  if (!user && targetUid) {
+    const defaultAuth = await getFirebaseAuth("[DEFAULT]");
+    if (defaultAuth.currentUser?.uid === targetUid) {
+      user = defaultAuth.currentUser;
+    }
+  }
   if (!user) {
+    const defaultAuth = await getFirebaseAuth();
+    user = defaultAuth.currentUser;
+  }
+  if (!user && !targetUid) {
     throw new Error("Please sign in with your Google account first.");
   }
 
+  const lookupUid = targetUid || user?.uid;
+  if (!lookupUid) {
+    throw new Error("No user UID available to fetch remote vault.");
+  }
+
   const db = await getFirebaseDb();
-  const docRef = doc(db, "vaults", user.uid);
+  const docRef = doc(db, "vaults", lookupUid);
 
   let snap: DocumentSnapshot;
   try {
@@ -398,8 +413,8 @@ export async function fetchRemoteVaultFromFirebase(): Promise<string | null> {
  * Restore a vault via Google account into the active working slot.
  * This is invoked when the active local vault does not match the Google account's cloud vault.
  * 1. Safely archives the current local vault to preserve existing data.
- * 2. Checks local archive cache (vault_${uid}.enc.json) or fetches the remote encrypted vault from Cloud Firestore.
- * 3. Saves the restored vault into the active working slot (vault.enc.json).
+ * 2. Fetches the remote encrypted vault from Cloud Firestore (or cached archive if offline).
+ * 3. Saves the restored vault into the active working slot (vault.enc.json) & archives it.
  * 4. Enables sync and updates account session state.
  */
 export async function restoreViaGoogleAccount(user: {
@@ -415,20 +430,26 @@ export async function restoreViaGoogleAccount(user: {
   // 1. Safely archive current local vault if present
   await archiveCurrentVault(currentUid, currentEmail);
 
-  // 2. Try restoring from local cached archive first
-  const localRestored = await restoreArchivedVault(user.uid);
-  if (localRestored) {
+  // 2. Fetch remote encrypted vault from Cloud Firestore
+  let remoteVaultRaw: string | null = null;
+  try {
+    remoteVaultRaw = await fetchRemoteVaultFromFirebase(user.uid);
+  } catch (err) {
+    console.warn("Failed to fetch remote vault from Firestore:", err);
+  }
+
+  // 3. If remote vault is found, save it. Otherwise check local archive.
+  if (!remoteVaultRaw) {
+    const localRestored = await restoreArchivedVault(user.uid);
+    if (!localRestored) {
+      throw new Error(`No cloud vault found for ${user.email || user.uid}.`);
+    }
     return true;
   }
 
-  // 3. Download remote encrypted vault from Cloud Firestore
-  const remoteVaultRaw = await fetchRemoteVaultFromFirebase();
-  if (!remoteVaultRaw) {
-    throw new Error(`No cloud vault found for ${user.email || user.uid}.`);
-  }
-
-  // 4. Save into active working slot
+  // 4. Save into active working slot and archive it
   await saveVaultFile(remoteVaultRaw);
+  await writeDataFile(`vault_${user.uid}.enc.json`, remoteVaultRaw);
   await deleteMpinWrap();
 
   try {

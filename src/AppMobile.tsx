@@ -307,6 +307,7 @@ export default function AppMobile() {
       onPurgeTrash={vault.purgeTrashEntry}
       onEmptyTrash={vault.emptyTrash}
       onImportTotp={vault.importTotpAccounts}
+      onRestoredVault={vault.loadRestoredVault}
       vaultTarget={vaultTarget}
     />
   );

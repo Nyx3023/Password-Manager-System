@@ -23,11 +23,12 @@ import { isFirebaseConfigured, loadFirebaseConfig } from "@/shared/firebaseConfi
 import { restoreArchivedVault } from "@/shared/accountVaults";
 import { DesktopVaultView } from "./DesktopVaultView";
 import { DesktopQuickAccess } from "./DesktopQuickAccess";
+import { AuthenticatorView } from "@/components/AuthenticatorView";
 import "./desktop.css";
 
 const AUTO_LOCK_MS = 5 * 60 * 1000;
 
-type Nav = "vault" | "settings";
+type Nav = "vault" | "authenticator" | "settings";
 
 export default function AppDesktop() {
   const vault = useVault();
@@ -349,6 +350,13 @@ export default function AppDesktop() {
           </button>
           <button
             type="button"
+            className={nav === "authenticator" ? "active" : ""}
+            onClick={() => setNav("authenticator")}
+          >
+            Authenticator
+          </button>
+          <button
+            type="button"
             className={nav === "settings" ? "active" : ""}
             onClick={() => setNav("settings")}
           >
@@ -383,7 +391,7 @@ export default function AppDesktop() {
       <div className="desktop-main">
         <header className="desktop-topbar">
           <div className="desktop-topbar-title">
-            <h1>{nav === "vault" ? "Vault" : "Settings"}</h1>
+            <h1>{nav === "vault" ? "Vault" : nav === "authenticator" ? "Authenticator" : "Settings"}</h1>
             {cloudConfig?.enabled && (
               <p className="muted small desktop-topbar-sync-meta">
                 Cloud push live | Last sync {formatLastSync(cloudConfig.lastSyncAt ?? null)}
@@ -391,15 +399,17 @@ export default function AppDesktop() {
             )}
           </div>
           <div className="desktop-topbar-actions">
-            <button
-              type="button"
-              className="ghost small"
-              onClick={() => setQuickAccess(true)}
-              title="Quick Search (Ctrl+Shift+Space)"
-              style={{ fontSize: "0.75rem" }}
-            >
-              🔍 Quick Search
-            </button>
+            {nav !== "vault" && nav !== "authenticator" && (
+              <button
+                type="button"
+                className="ghost small"
+                onClick={() => setQuickAccess(true)}
+                title="Quick Search (Ctrl+Shift+Space)"
+                style={{ fontSize: "0.75rem" }}
+              >
+                🔍 Quick Search
+              </button>
+            )}
             <button
               type="button"
               className={`topbar-google-btn${
@@ -512,6 +522,16 @@ export default function AppDesktop() {
               onImportTotp={vault.importTotpAccounts}
               vaultTarget={vaultTarget}
             />
+          ) : nav === "authenticator" ? (
+            <AuthenticatorView
+              entries={vault.entries}
+              people={vault.people}
+              onAdd={vault.addEntry}
+              onUpdate={vault.updateEntry}
+              onDelete={vault.deleteEntry}
+              onImportTotp={vault.importTotpAccounts}
+              onMessage={showToast}
+            />
           ) : (
             <DesktopVaultView
               entries={vault.entries}
@@ -547,6 +567,7 @@ export default function AppDesktop() {
         onClose={() => setFirebaseModalOpen(false)}
         onMessage={showToast}
         onSwitchAccount={vault.switchAccount}
+        onRestoredVault={vault.loadRestoredVault}
       />
     </div>
   );

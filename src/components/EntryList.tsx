@@ -9,7 +9,6 @@ import {
 import { colorForId } from "@/shared/people";
 import type { Person, VaultEntry } from "@/shared/types";
 import { PersonAvatar, ServiceIcon } from "./ServiceIcon";
-import { TotpColumnCell } from "./TotpColumnCell";
 
 const PAGE_SIZE = 12;
 
@@ -121,12 +120,6 @@ export function EntryList({
                   </div>
                   <span className="muted">{entrySubtitle(e)}</span>
                 </div>
-
-                {e.totpSeed && (
-                  <div className="entry-card-totp-col">
-                    <TotpColumnCell secret={e.totpSeed} />
-                  </div>
-                )}
 
                 {person && (
                   <PersonAvatar

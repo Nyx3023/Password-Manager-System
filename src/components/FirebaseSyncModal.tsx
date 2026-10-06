@@ -28,6 +28,7 @@ interface FirebaseSyncModalProps {
   onClose: () => void;
   onMessage: (message: string) => void;
   onSwitchAccount?: () => void;
+  onRestoredVault?: () => void | Promise<unknown>;
 }
 
 const GoogleIcon = ({ size = 18 }: { size?: number }) => (
@@ -57,6 +58,7 @@ export function FirebaseSyncModal({
   onClose,
   onMessage,
   onSwitchAccount,
+  onRestoredVault,
 }: FirebaseSyncModalProps) {
   const [syncState, setSyncState] = useState<FirebaseSyncConfig | null>(null);
   const [vaultOwner, setVaultOwner] = useState<{ ownerUid?: string; ownerEmail?: string } | null>(null);
@@ -278,8 +280,8 @@ export function FirebaseSyncModal({
       await restoreViaGoogleAccount(mismatchInfo.user);
       onMessage(`Cloud vault restored for ${mismatchInfo.user.email || "Google account"}. Enter your Master Password.`);
       onClose();
-      if (onSwitchAccount) {
-        await onSwitchAccount();
+      if (onRestoredVault) {
+        await onRestoredVault();
       } else {
         window.location.reload();
       }

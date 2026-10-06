@@ -29,8 +29,9 @@ import {
   type FirebaseSyncConfig,
   type VaultSyncTarget,
 } from "@/shared/firebaseSync";
+import { AuthenticatorView } from "./AuthenticatorView";
 
-type Tab = "vault" | "settings";
+type Tab = "vault" | "authenticator" | "settings";
 
 interface VaultScreenProps {
   entries: VaultEntry[];
@@ -81,6 +82,7 @@ interface VaultScreenProps {
   onResetApp: () => Promise<boolean>;
   onDeleteAccount?: () => Promise<boolean>;
   onSwitchAccount?: () => Promise<boolean>;
+  onRestoredVault?: () => Promise<boolean>;
   trashEntries?: TrashEntry[];
   onRestoreTrash?: (id: string) => Promise<unknown>;
   onPurgeTrash?: (id: string) => Promise<unknown>;
@@ -138,7 +140,7 @@ export function VaultScreen(props: VaultScreenProps) {
       setSelected(null);
       return true;
     }
-    if (tab === "settings") {
+    if (tab === "settings" || tab === "authenticator") {
       setTab("vault");
       return true;
     }
@@ -186,7 +188,7 @@ export function VaultScreen(props: VaultScreenProps) {
     <div className="app-shell">
       <header className="topbar">
         <div className="topbar-row">
-          <h2>{tab === "vault" ? "Vault" : "Settings"}</h2>
+          <h2>{tab === "vault" ? "Vault" : tab === "authenticator" ? "Authenticator" : "Settings"}</h2>
           <div className="topbar-actions">
             {props.vaultTarget && tab === "vault" && (
               <button
@@ -303,6 +305,17 @@ export function VaultScreen(props: VaultScreenProps) {
             onImportTotp={props.onImportTotp}
             onSwitchAccount={props.onSwitchAccount}
             vaultTarget={props.vaultTarget}
+          />
+        ) : tab === "authenticator" ? (
+          <AuthenticatorView
+            entries={props.entries}
+            people={props.people}
+            onAdd={props.onAdd}
+            onUpdate={props.onUpdate}
+            onDelete={props.onDelete}
+            onImportTotp={props.onImportTotp}
+            onMessage={props.onMessage}
+            onSelectEntry={(entry) => setSelected(entry)}
           />
         ) : props.entries.length === 0 ? (
           <div className="vault-home-empty">
@@ -520,6 +533,7 @@ export function VaultScreen(props: VaultScreenProps) {
           onClose={() => setFirebaseModalOpen(false)}
           onMessage={props.onMessage}
           onSwitchAccount={props.onSwitchAccount ? () => { void props.onSwitchAccount?.(); } : undefined}
+          onRestoredVault={props.onRestoredVault ? () => { void props.onRestoredVault?.(); } : undefined}
         />
       )}
 
@@ -531,6 +545,13 @@ export function VaultScreen(props: VaultScreenProps) {
             onClick={() => setTab("vault")}
           >
             Vault
+          </button>
+          <button
+            type="button"
+            className={tab === "authenticator" ? "active" : ""}
+            onClick={() => setTab("authenticator")}
+          >
+            Authenticator
           </button>
           <button
             type="button"
