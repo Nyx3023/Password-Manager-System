@@ -459,6 +459,136 @@ button:disabled {
   }
 }
 
+/* Update button in topbar with red dot indicator */
+.topbar-update-btn {
+  position: relative;
+  width: 36px;
+  height: 36px;
+  padding: 0;
+  border-radius: 50%;
+  border: 1.5px solid var(--border);
+  background: #141414;
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  cursor: pointer;
+  overflow: visible;
+  color: var(--text-muted, #aaa);
+  transition: border-color 0.2s, transform 0.15s, color 0.2s;
+  flex-shrink: 0;
+}
+
+.topbar-update-btn:hover {
+  border-color: var(--accent, #ff4438);
+  color: #fff;
+}
+
+.topbar-update-btn:active {
+  transform: scale(0.94);
+}
+
+.topbar-update-btn.has-update {
+  border-color: rgba(255, 68, 56, 0.5);
+  color: #fff;
+}
+
+.topbar-update-dot {
+  position: absolute;
+  top: 3px;
+  right: 3px;
+  width: 9px;
+  height: 9px;
+  border-radius: 50%;
+  background: #ff4438;
+  border: 1.5px solid #141414;
+  box-shadow: 0 0 6px rgba(255, 68, 56, 0.8);
+  animation: update-dot-pulse 2s infinite;
+}
+
+@keyframes update-dot-pulse {
+  0% { transform: scale(1); box-shadow: 0 0 4px #ff4438; }
+  50% { transform: scale(1.15); box-shadow: 0 0 8px #ff4438; }
+  100% { transform: scale(1); box-shadow: 0 0 4px #ff4438; }
+}
+
+/* Floating notification toast on desktop right side */
+.desktop-update-toast {
+  position: fixed;
+  top: 72px;
+  right: 24px;
+  z-index: 9999;
+  display: flex;
+  align-items: center;
+  gap: 12px;
+  padding: 12px 16px;
+  background: rgba(20, 20, 20, 0.95);
+  backdrop-filter: blur(12px);
+  -webkit-backdrop-filter: blur(12px);
+  border: 1px solid rgba(255, 68, 56, 0.4);
+  border-radius: 12px;
+  box-shadow: 0 8px 32px rgba(0, 0, 0, 0.6), 0 0 12px rgba(255, 68, 56, 0.15);
+  animation: slideInFromRight 0.35s cubic-bezier(0.16, 1, 0.3, 1);
+}
+
+@keyframes slideInFromRight {
+  from {
+    transform: translateX(40px);
+    opacity: 0;
+  }
+  to {
+    transform: translateX(0);
+    opacity: 1;
+  }
+}
+
+.desktop-update-toast-icon {
+  position: relative;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  width: 32px;
+  height: 32px;
+  border-radius: 8px;
+  background: rgba(255, 68, 56, 0.12);
+  color: var(--accent, #ff4438);
+  flex-shrink: 0;
+}
+
+.desktop-update-toast-content {
+  display: flex;
+  flex-direction: column;
+  gap: 2px;
+}
+
+.desktop-update-toast-title {
+  font-size: 0.85rem;
+  font-weight: 700;
+  color: #fff;
+  line-height: 1.2;
+}
+
+.desktop-update-toast-desc {
+  font-size: 0.75rem;
+  color: #aaa;
+  line-height: 1.2;
+}
+
+.desktop-update-toast-close {
+  background: none;
+  border: none;
+  color: #777;
+  font-size: 0.9rem;
+  padding: 4px;
+  cursor: pointer;
+  line-height: 1;
+  border-radius: 4px;
+  transition: color 0.15s;
+}
+
+.desktop-update-toast-close:hover {
+  color: #fff;
+}
+
 .topbar-google-avatar-wrap {
   width: 100%;
   height: 100%;

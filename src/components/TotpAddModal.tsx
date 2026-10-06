@@ -8,7 +8,6 @@ import {
   isGoogleAuthMigrationUri,
   type TotpAccount,
 } from "@/shared/totp";
-import { isDesktopApp } from "@/shared/platform";
 import type { Person, VaultEntry } from "@/shared/types";
 
 interface TotpAddModalProps {
@@ -22,7 +21,7 @@ interface TotpAddModalProps {
   onMessage?: (msg: string) => void;
 }
 
-type Mode = "select" | "scan" | "manual";
+type Mode = "scan" | "image" | "manual";
 
 interface TrackingBox {
   left: number; // percentage
@@ -40,8 +39,7 @@ export function TotpAddModal({
   onImportTotp,
   onMessage,
 }: TotpAddModalProps) {
-  const isDesktop = isDesktopApp();
-  const [mode, setMode] = useState<Mode>(isDesktop ? "manual" : "select");
+  const [mode, setMode] = useState<Mode>("scan");
   const [accountName, setAccountName] = useState("");
   const [issuer, setIssuer] = useState("");
   const [secretKey, setSecretKey] = useState("");
@@ -66,17 +64,40 @@ export function TotpAddModal({
   useEffect(() => {
     if (!open) {
       stopCamera();
-      setMode(isDesktop ? "manual" : "select");
+      setMode("scan");
       setAccountName("");
       setIssuer("");
       setSecretKey("");
       setCameraError(null);
       setTrackingBox(null);
       setTorchOn(false);
-    } else if (isDesktop) {
-      setMode("manual");
+    } else {
+      setMode("scan");
+      void startCamera();
     }
-  }, [open, isDesktop]);
+  }, [open]);
+
+  // Handle clipboard paste (e.g. user took a screenshot of QR code)
+  useEffect(() => {
+    if (!open) return;
+
+    const handlePaste = (e: ClipboardEvent) => {
+      const items = e.clipboardData?.items;
+      if (!items) return;
+      for (let i = 0; i < items.length; i++) {
+        if (items[i].type.startsWith("image/")) {
+          const file = items[i].getAsFile();
+          if (file) {
+            processImageFile(file);
+            break;
+          }
+        }
+      }
+    };
+
+    window.addEventListener("paste", handlePaste);
+    return () => window.removeEventListener("paste", handlePaste);
+  }, [open]);
 
   const stopCamera = () => {
     scanningRef.current = false;
@@ -129,34 +150,33 @@ export function TotpAddModal({
         setIssuer(accounts[0].issuer || "");
         setSecretKey(accounts[0].secret || "");
         setMode("manual");
-        onMessage?.("Google Authenticator account detected!");
-      } else {
-        if (onImportTotp) {
-          try {
-            const count = await onImportTotp(accounts, personId);
-            onMessage?.(`Imported ${count} accounts from Google Authenticator!`);
-            onClose();
-          } catch (e) {
-            setCameraError(e instanceof Error ? e.message : "Batch import failed.");
-          }
-        } else {
-          setAccountName(accounts[0].name || "");
-          setIssuer(accounts[0].issuer || "");
-          setSecretKey(accounts[0].secret || "");
-          setMode("manual");
-          onMessage?.(`Loaded 1 of ${accounts.length} Google Authenticator accounts.`);
+        onMessage?.(`Decoded ${accounts[0].issuer || accounts[0].name || "Google Authenticator"} account`);
+      } else if (onImportTotp) {
+        try {
+          const count = await onImportTotp(accounts, personId);
+          onMessage?.(`Imported ${count} accounts from Google Authenticator export`);
+          onClose();
+        } catch {
+          setCameraError("Failed to import accounts from QR code.");
         }
+      } else {
+        setAccountName(accounts[0].name || "");
+        setIssuer(accounts[0].issuer || "");
+        setSecretKey(accounts[0].secret || "");
+        setMode("manual");
       }
       return;
     }
 
+    // 2. Standard otpauth://totp/ URI
     const parsed = parseOtpauthUri(rawUri);
-    if (!parsed) {
-      setCameraError("QR code is not a valid TOTP authenticator URI.");
+    if (!parsed || !parsed.secret) {
+      setCameraError("Invalid 2FA QR Code. Standard otpauth:// expected.");
       scanningRef.current = true;
       setTrackingBox(null);
       return;
     }
+
     stopCamera();
     setAccountName(parsed.name || "");
     setIssuer(parsed.issuer || "");
@@ -194,7 +214,7 @@ export function TotpAddModal({
       }
     } catch (err) {
       setCameraError(
-        "Could not access camera. Please allow camera permissions or enter the setup key manually.",
+        "Could not access camera. You can upload a QR image or enter the key manually.",
       );
     }
   };
@@ -294,10 +314,9 @@ export function TotpAddModal({
     }
   };
 
-  // Handle uploaded QR screenshot / image file
-  const handleFileChange = (e: React.ChangeEvent<HTMLInputElement>) => {
-    const file = e.target.files?.[0];
-    if (!file) return;
+  // Process image file with jsQR
+  const processImageFile = (file: File) => {
+    setCameraError(null);
     const reader = new FileReader();
     reader.onload = (event) => {
       const img = new Image();
@@ -322,31 +341,54 @@ export function TotpAddModal({
     reader.readAsDataURL(file);
   };
 
+  const handleFileChange = (e: React.ChangeEvent<HTMLInputElement>) => {
+    const file = e.target.files?.[0];
+    if (file) {
+      processImageFile(file);
+    }
+  };
+
+  const handlePasteFromClipboard = async () => {
+    try {
+      if (!navigator.clipboard?.read) {
+        setCameraError("Clipboard read not supported. Press Ctrl+V to paste.");
+        return;
+      }
+      const clipboardItems = await navigator.clipboard.read();
+      for (const item of clipboardItems) {
+        const imageType = item.types.find((t) => t.startsWith("image/"));
+        if (imageType) {
+          const blob = await item.getType(imageType);
+          processImageFile(new File([blob], "clipboard.png", { type: imageType }));
+          return;
+        }
+      }
+      setCameraError("No image found on clipboard. Copy an image and click Paste.");
+    } catch {
+      setCameraError("Could not access clipboard. Please press Ctrl+V to paste.");
+    }
+  };
+
   const handleSave = async (e: React.FormEvent) => {
     e.preventDefault();
     const cleanSecret = secretKey.replace(/\s/g, "").toUpperCase();
     if (!cleanSecret) return;
     setSaving(true);
     try {
-      const title = issuer
-        ? accountName
-          ? `${issuer} (${accountName})`
-          : issuer
-        : accountName || "2FA Account";
-
       await onSave({
-        title,
+        title: issuer.trim() || accountName.trim() || "2FA Account",
+        username: accountName.trim(),
+        password: "",
+        url: "",
+        notes: "Imported via 2FA setup",
         personId: personId || people[0]?.id || "",
         categoryId: "authenticator",
         subcategoryId: "totp",
-        username: accountName,
-        password: "",
-        url: "",
-        notes: "Authenticator 2FA code",
         totpSeed: cleanSecret,
       });
       onClose();
-      onMessage?.(`Saved 2FA for ${title}`);
+    } catch (err: unknown) {
+      setCameraError(err instanceof Error ? err.message : "Failed to save entry.");
     } finally {
       setSaving(false);
     }
@@ -355,13 +397,11 @@ export function TotpAddModal({
   return (
     <Modal
       title={
-        isDesktop
-          ? "Add 2FA Authenticator"
-          : mode === "scan"
-            ? "Scan QR Code"
-            : mode === "manual"
-              ? "Enter Setup Key"
-              : "Add Authenticator"
+        mode === "scan"
+          ? "Scan QR Code"
+          : mode === "image"
+            ? "Upload / Paste QR Image"
+            : "Enter Setup Key"
       }
       open={open}
       onClose={() => {
@@ -370,58 +410,80 @@ export function TotpAddModal({
       }}
     >
       <div style={{ display: "flex", flexDirection: "column", gap: "1rem" }}>
-        {/* Mobile Selection Screen (Hidden on Desktop) */}
-        {!isDesktop && mode === "select" && (
-          <div style={{ display: "flex", flexDirection: "column", gap: "0.75rem" }}>
-            <p style={{ color: "#aaa", fontSize: "0.875rem", margin: 0 }}>
-              Choose how you want to add your 2FA account:
-            </p>
+        {/* Top 3-Way Mode Switcher (Visible on both Desktop and Mobile) */}
+        <div
+          style={{
+            display: "grid",
+            gridTemplateColumns: "1fr 1fr 1fr",
+            gap: "6px",
+            background: "rgba(255, 255, 255, 0.05)",
+            padding: "4px",
+            borderRadius: "10px",
+          }}
+        >
+          <button
+            type="button"
+            className={`ghost small${mode === "scan" ? " active" : ""}`}
+            style={{
+              padding: "6px 8px",
+              fontSize: "0.78rem",
+              fontWeight: 600,
+              background: mode === "scan" ? "var(--accent, #ff4438)" : "transparent",
+              color: mode === "scan" ? "#fff" : "#aaa",
+              borderColor: "transparent",
+              borderRadius: "6px",
+            }}
+            onClick={() => {
+              setMode("scan");
+              void startCamera();
+            }}
+          >
+            📷 Camera QR
+          </button>
 
-            <button
-              type="button"
-              className="primary"
-              style={{
-                padding: "0.9rem 1rem",
-                fontSize: "0.95rem",
-                textAlign: "left",
-                display: "flex",
-                flexDirection: "column",
-                gap: "0.2rem",
-              }}
-              onClick={() => {
-                setMode("scan");
-                void startCamera();
-              }}
-            >
-              <span>📷 <strong>Scan a QR code</strong></span>
-              <span style={{ fontSize: "0.75rem", opacity: 0.8 }}>
-                Fast camera scan with animated QR tracking
-              </span>
-            </button>
+          <button
+            type="button"
+            className={`ghost small${mode === "image" ? " active" : ""}`}
+            style={{
+              padding: "6px 8px",
+              fontSize: "0.78rem",
+              fontWeight: 600,
+              background: mode === "image" ? "var(--accent, #ff4438)" : "transparent",
+              color: mode === "image" ? "#fff" : "#aaa",
+              borderColor: "transparent",
+              borderRadius: "6px",
+            }}
+            onClick={() => {
+              stopCamera();
+              setMode("image");
+            }}
+          >
+            📁 Image QR
+          </button>
 
-            <button
-              type="button"
-              className="ghost"
-              style={{
-                padding: "0.9rem 1rem",
-                fontSize: "0.95rem",
-                textAlign: "left",
-                display: "flex",
-                flexDirection: "column",
-                gap: "0.2rem",
-              }}
-              onClick={() => setMode("manual")}
-            >
-              <span>⌨️ <strong>Enter a setup key</strong></span>
-              <span style={{ fontSize: "0.75rem", opacity: 0.8 }}>
-                Type in the Base32 security key provided by the service
-              </span>
-            </button>
-          </div>
-        )}
+          <button
+            type="button"
+            className={`ghost small${mode === "manual" ? " active" : ""}`}
+            style={{
+              padding: "6px 8px",
+              fontSize: "0.78rem",
+              fontWeight: 600,
+              background: mode === "manual" ? "var(--accent, #ff4438)" : "transparent",
+              color: mode === "manual" ? "#fff" : "#aaa",
+              borderColor: "transparent",
+              borderRadius: "6px",
+            }}
+            onClick={() => {
+              stopCamera();
+              setMode("manual");
+            }}
+          >
+            ⌨️ Secret Key
+          </button>
+        </div>
 
-        {/* Mobile Camera View with Google-Style Animated Reticle */}
-        {!isDesktop && mode === "scan" && (
+        {/* 1. Camera View with Google-Style Animated Reticle */}
+        {mode === "scan" && (
           <div style={{ display: "flex", flexDirection: "column", gap: "0.75rem", alignItems: "center" }}>
             <div
               style={{
@@ -447,7 +509,7 @@ export function TotpAddModal({
               />
               <canvas ref={canvasRef} style={{ display: "none" }} />
 
-              {/* Default Viewfinder Reticle (when searching) */}
+              {/* Default Viewfinder Reticle */}
               {!trackingBox?.locked && (
                 <div
                   style={{
@@ -459,7 +521,7 @@ export function TotpAddModal({
                     boxShadow: "0 0 0 9999px rgba(0, 0, 0, 0.45)",
                   }}
                 >
-                  {/* Glowing 4 Corner Brackets (Google Lens style) */}
+                  {/* Glowing 4 Corner Brackets */}
                   <div style={{ position: "absolute", top: -2, left: -2, width: 22, height: 22, borderTop: "4px solid #10b981", borderLeft: "4px solid #10b981", borderTopLeftRadius: "10px" }} />
                   <div style={{ position: "absolute", top: -2, right: -2, width: 22, height: 22, borderTop: "4px solid #10b981", borderRight: "4px solid #10b981", borderTopRightRadius: "10px" }} />
                   <div style={{ position: "absolute", bottom: -2, left: -2, width: 22, height: 22, borderBottom: "4px solid #10b981", borderLeft: "4px solid #10b981", borderBottomLeftRadius: "10px" }} />
@@ -480,7 +542,7 @@ export function TotpAddModal({
                 </div>
               )}
 
-              {/* Google-Style Tracking Reticle (smoothly snaps to detected QR) */}
+              {/* Google-Style Tracking Reticle (snaps to detected QR) */}
               {trackingBox?.locked && (
                 <div
                   style={{
@@ -525,7 +587,7 @@ export function TotpAddModal({
                 </div>
               )}
 
-              {/* Mobile Camera Controls (Torch & Flip) Floating Bar */}
+              {/* Camera Controls Floating Bar */}
               <div
                 style={{
                   position: "absolute",
@@ -580,44 +642,90 @@ export function TotpAddModal({
               </p>
             )}
 
-            <div style={{ display: "flex", gap: "0.5rem", width: "100%", justifyContent: "space-between" }}>
-              <button
-                type="button"
-                className="ghost small"
-                onClick={() => fileInputRef.current?.click()}
-              >
-                Upload QR Image
-              </button>
-              <input
-                ref={fileInputRef}
-                type="file"
-                accept="image/*"
-                style={{ display: "none" }}
-                onChange={handleFileChange}
-              />
-
+            <div style={{ display: "flex", gap: "0.5rem", width: "100%", justifyContent: "center" }}>
               <button
                 type="button"
                 className="ghost small"
                 onClick={() => {
                   stopCamera();
-                  setMode("manual");
+                  setMode("image");
                 }}
               >
-                Enter Key Manually
+                Upload / Paste QR Image instead
               </button>
             </div>
           </div>
         )}
 
-        {/* Manual Setup Key Input Form (Always displayed on Desktop) */}
+        {/* 2. Image Upload & Screenshot Paste Mode */}
+        {mode === "image" && (
+          <div style={{ display: "flex", flexDirection: "column", gap: "1rem" }}>
+            <div
+              onClick={() => fileInputRef.current?.click()}
+              onDragOver={(e) => e.preventDefault()}
+              onDrop={(e) => {
+                e.preventDefault();
+                const file = e.dataTransfer.files?.[0];
+                if (file) processImageFile(file);
+              }}
+              style={{
+                border: "2px dashed rgba(255, 255, 255, 0.2)",
+                borderRadius: "14px",
+                padding: "2.5rem 1.5rem",
+                textAlign: "center",
+                cursor: "pointer",
+                background: "rgba(255, 255, 255, 0.02)",
+                transition: "all 0.2s ease",
+                display: "flex",
+                flexDirection: "column",
+                alignItems: "center",
+                gap: "8px",
+              }}
+            >
+              <span style={{ fontSize: "2rem" }}>🖼️</span>
+              <strong style={{ fontSize: "0.95rem", color: "#fff" }}>
+                Click to browse or drop QR image here
+              </strong>
+              <p style={{ fontSize: "0.78rem", color: "#888", margin: 0 }}>
+                Supports PNG, JPG, or Google Authenticator export QR screenshots
+              </p>
+            </div>
+
+            <input
+              ref={fileInputRef}
+              type="file"
+              accept="image/*"
+              style={{ display: "none" }}
+              onChange={handleFileChange}
+            />
+
+            <div style={{ display: "flex", gap: "8px", justifyContent: "center" }}>
+              <button
+                type="button"
+                className="primary small"
+                onClick={handlePasteFromClipboard}
+                style={{ display: "flex", alignItems: "center", gap: "6px" }}
+              >
+                <span>📋</span> Paste QR from Clipboard (Ctrl+V)
+              </button>
+            </div>
+
+            {cameraError && (
+              <p style={{ color: "var(--danger, #ef4444)", fontSize: "0.85rem", margin: 0, textAlign: "center" }}>
+                {cameraError}
+              </p>
+            )}
+          </div>
+        )}
+
+        {/* 3. Manual Setup Key Input Form */}
         {mode === "manual" && (
           <form onSubmit={handleSave} style={{ display: "flex", flexDirection: "column", gap: "1rem" }}>
             <label>
-              <span className="label-text">Account Name</span>
+              <span className="label-text">Account Name (e.g. Username)</span>
               <input
                 type="text"
-                placeholder="e.g. john@example.com"
+                placeholder="e.g. iamsarammorrison"
                 value={accountName}
                 onChange={(e) => setAccountName(e.target.value)}
                 autoFocus
@@ -628,7 +736,7 @@ export function TotpAddModal({
               <span className="label-text">Service / Issuer</span>
               <input
                 type="text"
-                placeholder="e.g. Google, GitHub, Discord"
+                placeholder="e.g. Instagram, Google, GitHub"
                 value={issuer}
                 onChange={(e) => setIssuer(e.target.value)}
               />
@@ -670,16 +778,13 @@ export function TotpAddModal({
               </label>
             )}
 
+            {cameraError && (
+              <p style={{ color: "var(--danger, #ef4444)", fontSize: "0.85rem", margin: 0 }}>
+                {cameraError}
+              </p>
+            )}
+
             <div style={{ display: "flex", gap: "0.75rem", justifyContent: "flex-end", marginTop: "0.5rem" }}>
-              {!isDesktop && (
-                <button
-                  type="button"
-                  className="ghost"
-                  onClick={() => setMode("select")}
-                >
-                  Back
-                </button>
-              )}
               <button
                 type="submit"
                 className="primary"

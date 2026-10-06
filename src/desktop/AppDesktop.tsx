@@ -24,6 +24,8 @@ import { restoreArchivedVault } from "@/shared/accountVaults";
 import { DesktopVaultView } from "./DesktopVaultView";
 import { DesktopQuickAccess } from "./DesktopQuickAccess";
 import { AuthenticatorView } from "@/components/AuthenticatorView";
+import { UpdateModal } from "@/components/UpdateModal";
+import { checkForAppUpdates, type UpdateCheckResult } from "@/shared/updateService";
 import "./desktop.css";
 
 const AUTO_LOCK_MS = 5 * 60 * 1000;
@@ -40,6 +42,28 @@ export default function AppDesktop() {
   const [cloudConfig, setCloudConfig] = useState<FirebaseSyncState | null>(null);
   const [firebaseModalOpen, setFirebaseModalOpen] = useState(false);
   const [avatarFailed, setAvatarFailed] = useState(false);
+  const [updateInfo, setUpdateInfo] = useState<UpdateCheckResult | null>(null);
+  const [updateToastDismissed, setUpdateToastDismissed] = useState(false);
+  const [updateModalOpen, setUpdateModalOpen] = useState(false);
+
+  // Background update check on startup and periodically
+  useEffect(() => {
+    let mounted = true;
+    const check = async () => {
+      try {
+        const res = await checkForAppUpdates();
+        if (mounted && res?.hasUpdate) {
+          setUpdateInfo(res);
+        }
+      } catch {}
+    };
+    void check();
+    const interval = setInterval(check, 30 * 60 * 1000);
+    return () => {
+      mounted = false;
+      clearInterval(interval);
+    };
+  }, []);
 
   useEffect(() => {
     void initFirebaseAuthListener();
@@ -410,6 +434,23 @@ export default function AppDesktop() {
                 🔍 Quick Search
               </button>
             )}
+            {/* Update available icon with red dot next to Google account logo */}
+            {updateInfo?.hasUpdate && (
+              <button
+                type="button"
+                className="topbar-update-btn has-update"
+                onClick={() => setUpdateModalOpen(true)}
+                title={`Update available: v${updateInfo.latestVersion}`}
+                aria-label="Update available"
+              >
+                <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.2" strokeLinecap="round" strokeLinejoin="round">
+                  <path d="M21.5 2v6h-6" />
+                  <path d="M21.34 15.57a10 10 0 1 1-.57-8.38l5.67-1.19" />
+                </svg>
+                <span className="topbar-update-dot" />
+              </button>
+            )}
+
             <button
               type="button"
               className={`topbar-google-btn${
@@ -491,6 +532,41 @@ export default function AppDesktop() {
 
         {toast && <div className="toast desktop-toast">{toast}</div>}
 
+        {/* Right-side floating notification toast when update is available */}
+        {updateInfo?.hasUpdate && !updateToastDismissed && (
+          <div className="desktop-update-toast" role="alert">
+            <div className="desktop-update-toast-icon">
+              <svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.2" strokeLinecap="round" strokeLinejoin="round">
+                <path d="M21.5 2v6h-6" />
+                <path d="M21.34 15.57a10 10 0 1 1-.57-8.38l5.67-1.19" />
+              </svg>
+              <span className="topbar-update-dot" style={{ top: -2, right: -2 }} />
+            </div>
+            <div className="desktop-update-toast-content">
+              <span className="desktop-update-toast-title">Update Available</span>
+              <span className="desktop-update-toast-desc">
+                SecureX v{updateInfo.latestVersion} is ready to install
+              </span>
+            </div>
+            <button
+              type="button"
+              className="primary small"
+              style={{ fontSize: "0.75rem", padding: "4px 10px" }}
+              onClick={() => setUpdateModalOpen(true)}
+            >
+              Update
+            </button>
+            <button
+              type="button"
+              className="desktop-update-toast-close"
+              onClick={() => setUpdateToastDismissed(true)}
+              aria-label="Dismiss notification"
+            >
+              ✕
+            </button>
+          </div>
+        )}
+
         <main className="desktop-content">
           {nav === "settings" ? (
             <SettingsScreen
@@ -568,6 +644,12 @@ export default function AppDesktop() {
         onMessage={showToast}
         onSwitchAccount={vault.switchAccount}
         onRestoredVault={vault.loadRestoredVault}
+      />
+
+      <UpdateModal
+        open={updateModalOpen}
+        onClose={() => setUpdateModalOpen(false)}
+        onMessage={showToast}
       />
     </div>
   );

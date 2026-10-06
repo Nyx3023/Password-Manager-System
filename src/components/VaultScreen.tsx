@@ -30,6 +30,8 @@ import {
   type VaultSyncTarget,
 } from "@/shared/firebaseSync";
 import { AuthenticatorView } from "./AuthenticatorView";
+import { UpdateModal } from "./UpdateModal";
+import { checkForAppUpdates, type UpdateCheckResult } from "@/shared/updateService";
 
 type Tab = "vault" | "authenticator" | "settings";
 
@@ -105,6 +107,27 @@ export function VaultScreen(props: VaultScreenProps) {
   const [cloudConfig, setCloudConfig] = useState<FirebaseSyncConfig | null>(null);
   const [firebaseModalOpen, setFirebaseModalOpen] = useState(false);
   const [avatarFailed, setAvatarFailed] = useState(false);
+  const [updateInfo, setUpdateInfo] = useState<UpdateCheckResult | null>(null);
+  const [updateModalOpen, setUpdateModalOpen] = useState(false);
+
+  // Background update check on mobile
+  useEffect(() => {
+    let mounted = true;
+    const check = async () => {
+      try {
+        const res = await checkForAppUpdates();
+        if (mounted && res?.hasUpdate) {
+          setUpdateInfo(res);
+        }
+      } catch {}
+    };
+    void check();
+    const interval = setInterval(check, 30 * 60 * 1000);
+    return () => {
+      mounted = false;
+      clearInterval(interval);
+    };
+  }, []);
 
   useEffect(() => {
     void initFirebaseAuthListener();
@@ -190,7 +213,24 @@ export function VaultScreen(props: VaultScreenProps) {
         <div className="topbar-row">
           <h2>{tab === "vault" ? "Vault" : tab === "authenticator" ? "Authenticator" : "Settings"}</h2>
           <div className="topbar-actions">
-            {props.vaultTarget && tab === "vault" && (
+            {/* Update available icon with red dot next to Google account logo */}
+            {updateInfo?.hasUpdate && (
+              <button
+                type="button"
+                className="topbar-update-btn has-update"
+                onClick={() => setUpdateModalOpen(true)}
+                title={`Update available: v${updateInfo.latestVersion}`}
+                aria-label="Update available"
+              >
+                <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.2" strokeLinecap="round" strokeLinejoin="round">
+                  <path d="M21.5 2v6h-6" />
+                  <path d="M21.34 15.57a10 10 0 1 1-.57-8.38l5.67-1.19" />
+                </svg>
+                <span className="topbar-update-dot" />
+              </button>
+            )}
+
+            {props.vaultTarget && (
               <button
                 type="button"
                 className={`topbar-google-btn${
@@ -536,6 +576,12 @@ export function VaultScreen(props: VaultScreenProps) {
           onRestoredVault={props.onRestoredVault ? () => { void props.onRestoredVault?.(); } : undefined}
         />
       )}
+
+      <UpdateModal
+        open={updateModalOpen}
+        onClose={() => setUpdateModalOpen(false)}
+        onMessage={props.onMessage}
+      />
 
       <nav className="bottom-nav" aria-label="Main">
         <div className="bottom-nav-inner">
